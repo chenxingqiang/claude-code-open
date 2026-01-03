@@ -175,6 +175,7 @@ class ClaudeLLMGateway {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
+          connectSrc: ["'self'", "http://localhost:*", "http://127.0.0.1:*", "ws://localhost:*"],
           styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
           scriptSrc: ["'self'", "'unsafe-inline'"],
           scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers like onclick
@@ -520,21 +521,31 @@ class ClaudeLLMGateway {
    * Handle root path requests
    */
   handleRoot(req, res) {
-    res.json({
-      name: 'Claude LLM Gateway',
-      version: require('../package.json').version,
-      description: 'Multi-LLM API Gateway for Claude Code using llm-interface',
-      endpoints: {
-        messages: '/v1/messages',
-        chat: '/v1/chat/completions',
-        health: '/health',
-        providers: '/providers',
-        models: '/models',
-        stats: '/stats'
-      },
-      providers: Array.from(this.providers.keys()),
-      documentation: 'https://github.com/claude-llm-gateway'
-    });
+    // Check Accept header to determine response type
+    const acceptHeader = req.get('Accept') || '';
+    
+    // If client explicitly requests JSON or is an API client
+    if (acceptHeader.includes('application/json') && !acceptHeader.includes('text/html')) {
+      return res.json({
+        name: 'Claude LLM Gateway',
+        version: require('../package.json').version,
+        description: 'Multi-LLM API Gateway for Claude Code using llm-interface',
+        endpoints: {
+          messages: '/v1/messages',
+          chat: '/v1/chat/completions',
+          health: '/health',
+          providers: '/providers',
+          models: '/models',
+          stats: '/stats'
+        },
+        providers: Array.from(this.providers.keys()),
+        documentation: 'https://github.com/claude-llm-gateway'
+      });
+    }
+    
+    // For browser requests, serve the HTML dashboard
+    const indexPath = path.join(__dirname, '..', 'public', 'index.html');
+    res.sendFile(indexPath);
   }
 
   /**

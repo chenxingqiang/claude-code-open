@@ -111,7 +111,31 @@ const i18n = {
         
         // Quality translations
         very_high: '非常高',
-        high: '高'
+        high: '高',
+        
+        // Priority translations
+        priorityHigh: '高',
+        priorityMedium: '中',
+        priorityLow: '低',
+        
+        // Action messages
+        enabled: '已启用',
+        disabled: '已禁用',
+        toggleProviderFailed: '切换提供者状态失败',
+        fillAllFields: '请填写所有必填字段',
+        addProviderFailed: '添加提供者失败',
+        addedSuccessfully: '添加成功',
+        envVarsSaved: '环境变量已保存',
+        saveEnvVarsFailed: '保存环境变量失败',
+        gatewaySettingsSaved: '网关设置已保存',
+        saveGatewaySettingsFailed: '保存网关设置失败',
+        enterApiKeyFirst: '请先输入API密钥',
+        validationSuccess: '验证成功',
+        validationFailed: '验证失败',
+        refreshing: '正在刷新...',
+        refreshComplete: '刷新完成',
+        apiRequestFailed: 'API请求失败',
+        lastUpdated: '最后更新'
     },
     en: {
         // Navigation tabs
@@ -217,7 +241,31 @@ const i18n = {
         
         // Quality translations
         very_high: 'Very High',
-        high: 'High'
+        high: 'High',
+        
+        // Priority translations
+        priorityHigh: 'High',
+        priorityMedium: 'Medium',
+        priorityLow: 'Low',
+        
+        // Action messages
+        enabled: 'enabled',
+        disabled: 'disabled',
+        toggleProviderFailed: 'Failed to toggle provider',
+        fillAllFields: 'Please fill all required fields',
+        addProviderFailed: 'Failed to add provider',
+        addedSuccessfully: 'added successfully',
+        envVarsSaved: 'Environment variables saved',
+        saveEnvVarsFailed: 'Failed to save environment variables',
+        gatewaySettingsSaved: 'Gateway settings saved',
+        saveGatewaySettingsFailed: 'Failed to save gateway settings',
+        enterApiKeyFirst: 'Please enter API key first',
+        validationSuccess: 'Validation successful',
+        validationFailed: 'Validation failed',
+        refreshing: 'Refreshing...',
+        refreshComplete: 'Refresh complete',
+        apiRequestFailed: 'API request failed',
+        lastUpdated: 'Last updated'
     }
 };
 
@@ -352,7 +400,7 @@ async function apiRequest(endpoint, options = {}) {
         return await response.json();
     } catch (error) {
         console.error('API Request failed:', error);
-        showNotification('API请求失败: ' + error.message, 'error');
+        showNotification(t('apiRequestFailed') + ': ' + error.message, 'error');
         throw error;
     }
 }
@@ -515,19 +563,19 @@ function createProviderCard(name, provider) {
 }
 
 function getPriorityBadge(priority) {
-    let badgeClass, text;
+    let badgeClass, textKey;
     if (priority <= 3) {
         badgeClass = 'bg-green-100 text-green-800';
-        text = '高';
+        textKey = 'priorityHigh';
     } else if (priority <= 6) {
         badgeClass = 'bg-yellow-100 text-yellow-800';
-        text = '中';
+        textKey = 'priorityMedium';
     } else {
         badgeClass = 'bg-gray-100 text-gray-800';
-        text = '低';
+        textKey = 'priorityLow';
     }
     
-    return `<span class="px-2 py-1 ${badgeClass} text-xs rounded-full">${text}</span>`;
+    return `<span class="px-2 py-1 ${badgeClass} text-xs rounded-full">${t(textKey)}</span>`;
 }
 
 function renderModelStats() {
@@ -714,10 +762,10 @@ async function toggleProvider(name, enabled) {
             body: JSON.stringify({ enabled })
         });
         
-        showNotification(`${name} ${enabled ? '已启用' : '已禁用'}`, 'success');
+        showNotification(`${name} ${enabled ? t('enabled') : t('disabled')}`, 'success');
         loadDashboard();
     } catch (error) {
-        showNotification('切换提供者状态失败', 'error');
+        showNotification(t('toggleProviderFailed'), 'error');
     }
 }
 
@@ -815,7 +863,7 @@ async function addProvider() {
     const priority = document.getElementById('new-provider-priority').value;
 
     if (!name || !key) {
-        showNotification('请填写所有必填字段', 'error');
+        showNotification(t('fillAllFields'), 'error');
         return;
     }
 
@@ -829,11 +877,11 @@ async function addProvider() {
             })
         });
         
-        showNotification(`${name} 添加成功`, 'success');
+        showNotification(`${name} ${t('addedSuccessfully')}`, 'success');
         closeAddProviderModal();
         loadDashboard();
     } catch (error) {
-        showNotification('添加提供者失败', 'error');
+        showNotification(t('addProviderFailed'), 'error');
     }
 }
 
@@ -854,10 +902,10 @@ async function saveEnvironmentVariables() {
             body: JSON.stringify(envVars)
         });
         
-        showNotification('环境变量已保存', 'success');
+        showNotification(t('envVarsSaved'), 'success');
         loadDashboard();
     } catch (error) {
-        showNotification('保存环境变量失败', 'error');
+        showNotification(t('saveEnvVarsFailed'), 'error');
     }
 }
 
@@ -875,9 +923,9 @@ async function saveGatewaySettings() {
             body: JSON.stringify(settings)
         });
         
-        showNotification('网关设置已保存', 'success');
+        showNotification(t('gatewaySettingsSaved'), 'success');
     } catch (error) {
-        showNotification('保存网关设置失败', 'error');
+        showNotification(t('saveGatewaySettingsFailed'), 'error');
     }
 }
 
@@ -886,7 +934,7 @@ async function testEnvVariable(key) {
     const value = input.value.trim();
     
     if (!value) {
-        showNotification('请先输入API密钥', 'error');
+        showNotification(t('enterApiKeyFirst'), 'error');
         return;
     }
 
@@ -897,20 +945,20 @@ async function testEnvVariable(key) {
         });
         
         if (response.success) {
-            showNotification(`${key} 验证成功`, 'success');
+            showNotification(`${key} ${t('validationSuccess')}`, 'success');
         } else {
-            showNotification(`${key} 验证失败`, 'error');
+            showNotification(`${key} ${t('validationFailed')}`, 'error');
         }
     } catch (error) {
-        showNotification('验证失败', 'error');
+        showNotification(t('validationFailed'), 'error');
     }
 }
 
 // Refresh functions
 async function refreshAll() {
-    showNotification('正在刷新...', 'info');
+    showNotification(t('refreshing'), 'info');
     await loadDashboard();
-    showNotification('刷新完成', 'success');
+    showNotification(t('refreshComplete'), 'success');
 }
 
 // Log functions
@@ -951,7 +999,7 @@ function clearLogs() {
 // Utility functions
 function updateLastUpdateTime() {
     document.getElementById('last-update').textContent = 
-        `最后更新: ${new Date().toLocaleTimeString()}`;
+        `${t('lastUpdated')}: ${new Date().toLocaleTimeString()}`;
 }
 
 function showNotification(message, type = 'info') {

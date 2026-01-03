@@ -1,665 +1,959 @@
 {
-  "generated_at": "2025-08-09T12:10:34.017Z",
+  "generated_at": "2026-01-03T10:11:50.351Z",
   "llm_interface_version": "2.0.1495",
-  "total_providers": 36,
-  "enabled_providers": 8,
+  "total_providers": 5,
+  "enabled_providers": 0,
   "providers": {
-    "openai": {
-      "enabled": true,
-      "priority": 2,
-      "models": [
-        "gpt-4",
-        "gpt-3.5-turbo",
-        "gpt-4-turbo",
-        "gpt-4o"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true,
-        "embeddings": true
+    "generated_at": "2026-01-03T08:56:14.035Z",
+    "llm_interface_version": "2.0.1495",
+    "total_providers": 45,
+    "enabled_providers": 7,
+    "providers": {
+      "openai": {
+        "enabled": true,
+        "priority": 2,
+        "models": [
+          "gpt-5.2",
+          "gpt-5.1",
+          "gpt-5",
+          "gpt-4.1",
+          "gpt-4.1-mini",
+          "gpt-4o",
+          "gpt-4o-mini",
+          "gpt-4-turbo",
+          "gpt-4",
+          "o4-mini",
+          "o3-pro",
+          "o3",
+          "o3-mini",
+          "o1",
+          "o1-mini",
+          "o1-preview"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true,
+          "embeddings": true
+        },
+        "rate_limit": 60,
+        "cost_per_1k_tokens": 0.03,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.019Z"
       },
-      "rate_limit": 60,
-      "cost_per_1k_tokens": 0.03,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.006Z"
-    },
-    "anthropic": {
-      "enabled": true,
-      "priority": 3,
-      "models": [
-        "claude-3-sonnet",
-        "claude-3-haiku",
-        "claude-3-opus"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "anthropic": {
+        "enabled": true,
+        "priority": 3,
+        "models": [
+          "claude-opus-4-5-20251215",
+          "claude-sonnet-4-5-20251101",
+          "claude-haiku-4-5-20251101",
+          "claude-opus-4-20250522",
+          "claude-sonnet-4-20250514",
+          "claude-3-7-sonnet-20250219",
+          "claude-3-5-sonnet-20241022",
+          "claude-3-5-haiku-20241022",
+          "claude-3-opus-20240229"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 50,
+        "cost_per_1k_tokens": 0.015,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.020Z"
       },
-      "rate_limit": 50,
-      "cost_per_1k_tokens": 0.015,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.006Z"
-    },
-    "google": {
-      "enabled": true,
-      "priority": 4,
-      "models": [
-        "gemini-pro",
-        "gemini-flash",
-        "gemini-ultra"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true,
-        "vision": true
+      "google": {
+        "enabled": true,
+        "priority": 4,
+        "models": [
+          "gemini-3-pro-preview",
+          "gemini-2.5-pro",
+          "gemini-2.5-pro-preview",
+          "gemini-2.5-flash",
+          "gemini-2.5-flash-preview",
+          "gemini-2.0-flash",
+          "gemini-2.0-flash-exp",
+          "gemini-1.5-pro",
+          "gemini-1.5-flash"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true,
+          "vision": true
+        },
+        "rate_limit": 100,
+        "cost_per_1k_tokens": 0.001,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.020Z"
       },
-      "rate_limit": 100,
-      "cost_per_1k_tokens": 0.001,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.006Z"
-    },
-    "cohere": {
-      "enabled": false,
-      "priority": 6,
-      "models": [
-        "command-r-plus",
-        "command",
-        "command-light"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true,
-        "embeddings": true
+      "cohere": {
+        "enabled": false,
+        "priority": 6,
+        "models": [
+          "command-r-plus",
+          "command-r",
+          "command-r-08-2024",
+          "command-light",
+          "command-nightly"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true,
+          "embeddings": true
+        },
+        "rate_limit": 40,
+        "cost_per_1k_tokens": 0.02,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.021Z"
       },
-      "rate_limit": 40,
-      "cost_per_1k_tokens": 0.02,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.006Z"
-    },
-    "huggingface": {
-      "enabled": false,
-      "priority": 9,
-      "models": [
-        "microsoft/DialoGPT-large",
-        "microsoft/DialoGPT-medium"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "huggingface": {
+        "enabled": false,
+        "priority": 9,
+        "models": [
+          "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+          "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+          "meta-llama/Llama-3.3-70B-Instruct",
+          "Qwen/Qwen2.5-72B-Instruct",
+          "Qwen/QwQ-32B-Preview",
+          "deepseek-ai/DeepSeek-V3",
+          "mistralai/Mistral-Large-Instruct-2411",
+          "microsoft/Phi-4"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.001,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": false,
+        "last_updated": "2026-01-03T08:56:14.021Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.001,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": false,
-      "last_updated": "2025-08-09T12:10:34.006Z"
-    },
-    "ollama": {
-      "enabled": {},
-      "priority": 5,
-      "models": [
-        "codellama:latest",
-        "mistral:latest",
-        "llama2:latest",
-        "tom_himanen/deepseek-r1-roo-cline-tools:32b",
-        "deepseek-r1:7b",
-        "deepseek-coder:6.7b",
-        "nomic-embed-text:latest",
-        "qwen2.5-coder:32b",
-        "llama3.1:8b",
-        "qwen2.5-coder:1.5b",
-        "phi3:latest",
-        "llama3.1:latest",
-        "mixtral:latest"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "ollama": {
+        "enabled": true,
+        "priority": 5,
+        "models": [
+          "llama4:scout",
+          "llama4:maverick",
+          "llama3.3:70b",
+          "llama3.2:3b",
+          "llama3.1:8b",
+          "qwen2.5:72b",
+          "qwen2.5:32b",
+          "qwen2.5:7b",
+          "deepseek-v3:latest",
+          "deepseek-r1:70b",
+          "deepseek-r1:32b",
+          "deepseek-r1:8b",
+          "gemma2:27b",
+          "gemma2:9b",
+          "mistral:7b",
+          "codellama:34b"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 1000,
+        "cost_per_1k_tokens": 0.001,
+        "requires_api_key": false,
+        "local": true,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 1000,
-      "cost_per_1k_tokens": 0.001,
-      "requires_api_key": false,
-      "local": true,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "mistral": {
-      "enabled": true,
-      "priority": 7,
-      "models": [
-        "mistral-large",
-        "mistral-medium",
-        "mistral-small"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "mistral": {
+        "enabled": true,
+        "priority": 7,
+        "models": [
+          "mistral-large-3",
+          "mistral-large-2411",
+          "mistral-large-latest",
+          "mistral-medium-latest",
+          "mistral-small-latest",
+          "mistral-saba-24b",
+          "codestral-2501",
+          "codestral-latest",
+          "pixtral-large-latest",
+          "pixtral-12b-2409",
+          "open-mixtral-8x22b",
+          "open-mixtral-8x7b"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 50,
+        "cost_per_1k_tokens": 0.025,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 50,
-      "cost_per_1k_tokens": 0.025,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "groq": {
-      "enabled": true,
-      "priority": 8,
-      "models": [
-        "llama2-70b-4096",
-        "mixtral-8x7b-32768"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "groq": {
+        "enabled": true,
+        "priority": 8,
+        "models": [
+          "llama-4-scout-17b-16e-instruct",
+          "llama-4-maverick-17b-128e-instruct",
+          "llama-guard-4-12b",
+          "llama-3.3-70b-versatile",
+          "llama-3.1-70b-versatile",
+          "llama-3.1-8b-instant",
+          "mistral-saba-24b",
+          "mixtral-8x7b-32768",
+          "gemma2-9b-it",
+          "qwen-qwq-32b"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.001,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.001,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "perplexity": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "pplx-7b-online",
-        "pplx-70b-online",
-        "pplx-7b-chat",
-        "pplx-70b-chat"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "perplexity": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "llama-3.1-sonar-small-128k-online",
+          "llama-3.1-sonar-large-128k-online",
+          "llama-3.1-sonar-huge-128k-online",
+          "llama-3.1-sonar-small-128k-chat",
+          "llama-3.1-sonar-large-128k-chat"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 20,
+        "cost_per_1k_tokens": 0.02,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 20,
-      "cost_per_1k_tokens": 0.02,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "ai21": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "j2-ultra",
-        "j2-mid",
-        "j2-light"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "ai21": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "jamba-1.5-large",
+          "jamba-1.5-mini",
+          "j2-ultra",
+          "j2-mid"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 20,
+        "cost_per_1k_tokens": 0.025,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 20,
-      "cost_per_1k_tokens": 0.025,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "nvidia": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "nv-llama2-70b",
-        "nv-code-llama-70b"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "nvidia": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "meta/llama-3.1-405b-instruct",
+          "meta/llama-3.1-70b-instruct",
+          "nvidia/llama-3.1-nemotron-70b-instruct",
+          "mistralai/mixtral-8x22b-instruct-v0.1"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.015,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.015,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "fireworks": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "llama-v2-7b-chat",
-        "llama-v2-13b-chat",
-        "llama-v2-70b-chat"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "fireworks": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "accounts/fireworks/models/llama4-scout-instruct",
+          "accounts/fireworks/models/llama4-maverick-instruct",
+          "accounts/fireworks/models/llama-v3p3-70b-instruct",
+          "accounts/fireworks/models/llama-v3p1-405b-instruct",
+          "accounts/fireworks/models/deepseek-v3",
+          "accounts/fireworks/models/deepseek-r1",
+          "accounts/fireworks/models/qwen2p5-72b-instruct",
+          "accounts/fireworks/models/mixtral-8x22b-instruct"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 40,
+        "cost_per_1k_tokens": 0.002,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 40,
-      "cost_per_1k_tokens": 0.002,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "together": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "togethercomputer/llama-2-7b-chat",
-        "togethercomputer/llama-2-13b-chat",
-        "togethercomputer/llama-2-70b-chat"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "together": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+          "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+          "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+          "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo",
+          "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+          "deepseek-ai/DeepSeek-V3",
+          "deepseek-ai/DeepSeek-R1",
+          "Qwen/Qwen2.5-72B-Instruct-Turbo",
+          "Qwen/QwQ-32B",
+          "mistralai/Mixtral-8x22B-Instruct-v0.1"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 40,
+        "cost_per_1k_tokens": 0.002,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 40,
-      "cost_per_1k_tokens": 0.002,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "anyscale": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "meta-llama/Llama-2-7b-chat-hf",
-        "meta-llama/Llama-2-13b-chat-hf",
-        "meta-llama/Llama-2-70b-chat-hf"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "anyscale": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "meta-llama/Llama-3-70b-chat-hf",
+          "meta-llama/Llama-3-8b-chat-hf",
+          "mistralai/Mixtral-8x7B-Instruct-v0.1",
+          "codellama/CodeLlama-70b-Instruct-hf"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 50,
+        "cost_per_1k_tokens": 0.001,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 50,
-      "cost_per_1k_tokens": 0.001,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "deepseek": {
-      "enabled": true,
-      "priority": 1,
-      "models": [
-        "deepseek-chat",
-        "deepseek-coder"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "deepseek": {
+        "enabled": true,
+        "priority": 1,
+        "models": [
+          "deepseek-chat",
+          "deepseek-reasoner",
+          "deepseek-v3.2-speciale",
+          "deepseek-v3.1",
+          "deepseek-v3-0324",
+          "deepseek-r1-0528",
+          "deepseek-r1",
+          "deepseek-coder"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.001,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.001,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "replicate": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "llama-2-70b-chat",
-        "llama-2-13b-chat",
-        "llama-2-7b-chat"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "replicate": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "meta/llama-3.3-70b-instruct",
+          "meta/llama-3.1-405b-instruct",
+          "meta/llama-3-70b-instruct",
+          "mistralai/mixtral-8x7b-instruct-v0.1"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 20,
+        "cost_per_1k_tokens": 0.005,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 20,
-      "cost_per_1k_tokens": 0.005,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "gooseai": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "gooseai": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "forefront": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "forefront": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "writer": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "writer": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "neets": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "neets": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "lamini": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "lamini": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "hyperbee": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "hyperbee": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "novita": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "novita": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "shuttle": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "shuttle": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "theb": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "theb": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "corcel": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "corcel": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.034Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "aimlapi": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "aimlapi": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.035Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "ailayer": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "ailayer": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.035Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.016Z"
-    },
-    "monster": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "monster": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.035Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.017Z"
-    },
-    "deepinfra": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "deepinfra": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+          "meta-llama/Meta-Llama-3.1-405B-Instruct",
+          "Qwen/Qwen2.5-72B-Instruct",
+          "mistralai/Mixtral-8x22B-Instruct-v0.1"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.035Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.017Z"
-    },
-    "friendliai": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "friendliai": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.035Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.017Z"
-    },
-    "reka": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "reka": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.035Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.017Z"
-    },
-    "voyage": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "voyage": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.035Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.017Z"
-    },
-    "watsonx": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "watsonx": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "default-model"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.035Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.017Z"
-    },
-    "zhellopu": {
-      "enabled": false,
-      "priority": 10,
-      "models": [
-        "default-model"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "zhipu": {
+        "enabled": false,
+        "priority": 10,
+        "models": [
+          "glm-4-plus",
+          "glm-4-0520",
+          "glm-4-air",
+          "glm-4-airx",
+          "glm-4-flash",
+          "glm-4v-plus",
+          "glm-4v"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true,
+          "vision": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.035Z"
       },
-      "rate_limit": 30,
-      "cost_per_1k_tokens": 0.01,
-      "requires_api_key": true,
-      "local": false,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.017Z"
-    },
-    "llamacpp": {
-      "enabled": {},
-      "priority": 10,
-      "models": [
-        "llama-2-7b-chat",
-        "llama-2-13b-chat",
-        "codellama-7b-instruct"
-      ],
-      "capabilities": {
-        "chat": true,
-        "completion": true
+      "xai": {
+        "enabled": false,
+        "priority": 8,
+        "models": [
+          "grok-4-heavy",
+          "grok-4",
+          "grok-4-fast",
+          "grok-3",
+          "grok-3-mini",
+          "grok-2-vision",
+          "grok-2",
+          "grok-beta"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true,
+          "vision": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.02,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T09:30:00.000Z"
       },
-      "rate_limit": 1000,
-      "cost_per_1k_tokens": 0.001,
-      "requires_api_key": false,
-      "local": true,
-      "streaming_support": true,
-      "last_updated": "2025-08-09T12:10:34.017Z"
+      "bedrock": {
+        "enabled": false,
+        "priority": 9,
+        "models": [
+          "anthropic.claude-opus-4-5-v1:0",
+          "anthropic.claude-sonnet-4-5-v1:0",
+          "anthropic.claude-haiku-4-5-v1:0",
+          "anthropic.claude-opus-4-v1:0",
+          "anthropic.claude-sonnet-4-v1:0",
+          "anthropic.claude-3-5-sonnet-v2:0",
+          "amazon.nova-premier-v1:0",
+          "amazon.nova-pro-v1:0",
+          "amazon.nova-lite-v1:0",
+          "amazon.titan-text-premier-v1:0",
+          "meta.llama4-scout-17b-instruct-v1:0",
+          "meta.llama4-maverick-17b-instruct-v1:0",
+          "meta.llama3-3-70b-instruct-v1:0",
+          "mistral.mistral-large-2411-v1:0"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 50,
+        "cost_per_1k_tokens": 0.015,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T09:30:00.000Z"
+      },
+      "azure": {
+        "enabled": false,
+        "priority": 9,
+        "models": [
+          "gpt-4o",
+          "gpt-4o-mini",
+          "gpt-4-turbo",
+          "gpt-4",
+          "gpt-35-turbo",
+          "o1",
+          "o1-mini",
+          "o1-preview"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true,
+          "embeddings": true
+        },
+        "rate_limit": 60,
+        "cost_per_1k_tokens": 0.03,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T09:30:00.000Z"
+      },
+      "openrouter": {
+        "enabled": false,
+        "priority": 7,
+        "models": [
+          "openai/gpt-5.2",
+          "openai/gpt-4o",
+          "openai/o3",
+          "openai/o1",
+          "anthropic/claude-opus-4",
+          "anthropic/claude-sonnet-4",
+          "anthropic/claude-3.5-sonnet",
+          "google/gemini-2.5-pro",
+          "google/gemini-2.5-flash",
+          "meta-llama/llama-4-maverick",
+          "meta-llama/llama-4-scout",
+          "deepseek/deepseek-v3.1",
+          "deepseek/deepseek-r1",
+          "mistralai/mistral-large-3",
+          "qwen/qwen-2.5-72b-instruct",
+          "x-ai/grok-4"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 100,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T09:30:00.000Z"
+      },
+      "alibaba": {
+        "enabled": false,
+        "priority": 8,
+        "models": [
+          "qwen3-235b-a22b",
+          "qwen3-32b",
+          "qwen-max",
+          "qwen-max-longcontext",
+          "qwen-plus",
+          "qwen-turbo",
+          "qwen2.5-72b-instruct",
+          "qwen2.5-coder-32b-instruct",
+          "qwq-32b-preview",
+          "qwen-vl-max",
+          "qwen-vl-plus"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true,
+          "vision": true
+        },
+        "rate_limit": 60,
+        "cost_per_1k_tokens": 0.008,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T09:30:00.000Z"
+      },
+      "moonshot": {
+        "enabled": false,
+        "priority": 9,
+        "models": [
+          "moonshot-v1-8k",
+          "moonshot-v1-32k",
+          "moonshot-v1-128k"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.012,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T09:30:00.000Z"
+      },
+      "baidu": {
+        "enabled": false,
+        "priority": 9,
+        "models": [
+          "ernie-4.0-8k",
+          "ernie-4.0-turbo-8k",
+          "ernie-3.5-8k",
+          "ernie-speed-8k",
+          "ernie-lite-8k"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.015,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T09:30:00.000Z"
+      },
+      "minimax": {
+        "enabled": false,
+        "priority": 9,
+        "models": [
+          "abab6.5s-chat",
+          "abab6.5-chat",
+          "abab5.5s-chat",
+          "abab5.5-chat"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 30,
+        "cost_per_1k_tokens": 0.01,
+        "requires_api_key": true,
+        "local": false,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T09:30:00.000Z"
+      },
+      "llamacpp": {
+        "enabled": {},
+        "priority": 10,
+        "models": [
+          "llama-3.3-70b-instruct",
+          "llama-3.1-8b-instruct",
+          "qwen2.5-7b-instruct",
+          "mistral-7b-instruct-v0.3",
+          "codellama-7b-instruct"
+        ],
+        "capabilities": {
+          "chat": true,
+          "completion": true
+        },
+        "rate_limit": 1000,
+        "cost_per_1k_tokens": 0.001,
+        "requires_api_key": false,
+        "local": true,
+        "streaming_support": true,
+        "last_updated": "2026-01-03T08:56:14.035Z"
+      }
     }
   }
 }

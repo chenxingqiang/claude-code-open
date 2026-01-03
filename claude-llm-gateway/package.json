@@ -1,6 +1,6 @@
 {
   "name": "claude-llm-gateway",
-  "version": "1.2.9",
+  "version": "1.4.0",
   "description": "🧠 Intelligent API gateway with automatic model selection - connects Claude Code to 36+ LLM providers with smart task detection and cost optimization",
   "main": "index.js",
   "bin": {
@@ -8,6 +8,11 @@
   },
   "scripts": {
     "start": "node src/server.js",
+    "start:bg": "./scripts/daemon.sh start",
+    "stop": "./scripts/daemon.sh stop",
+    "restart": "./scripts/daemon.sh restart",
+    "status": "./scripts/daemon.sh status",
+    "logs": "./scripts/daemon.sh logs",
     "dev": "nodemon src/server.js",
     "web": "node web-server.js",
     "web:dev": "nodemon web-server.js",
@@ -76,6 +81,8 @@
     "src/",
     "scripts/",
     "bin/",
+    "public/",
+    "config/",
     "docs/",
     "index.js",
     "README.md",
