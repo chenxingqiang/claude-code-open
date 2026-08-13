@@ -97,7 +97,6 @@
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
-    "llm-interface": "^2.0.14",
     "node-fetch": "^2.7.0",
     "uuid": "^9.0.1",
     "winston": "^3.11.0"

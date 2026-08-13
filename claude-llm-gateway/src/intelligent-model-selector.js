@@ -33,11 +33,14 @@ class IntelligentModelSelector {
             if (!model || !model.id) {
                 continue;
             }
+            const supportedParams = Array.isArray(model.supported_parameters) ? model.supported_parameters : [];
             const entry = {
                 capabilities: model.capabilities || {},
                 context_length: model.context_length != null ? model.context_length : null,
                 input_modalities: Array.isArray(model.input_modalities) ? model.input_modalities : [],
-                cost_per_1k_tokens: model.cost_per_1k_tokens
+                cost_per_1k_tokens: model.cost_per_1k_tokens,
+                supported_parameters: supportedParams,
+                is_reasoning: supportedParams.some(p => ['reasoning', 'include_reasoning', 'reasoning_effort'].includes(p))
             };
             const keys = new Set([model.id, model.canonical_slug, model.short_slug].filter(Boolean));
             for (const key of keys) {
@@ -46,6 +49,35 @@ class IntelligentModelSelector {
             }
         }
         return updated;
+    }
+
+    /**
+     * Whether a model is a reasoning model (per OpenRouter supported_parameters).
+     * @param {string} modelName
+     * @returns {boolean}
+     */
+    isReasoningModel(modelName) {
+        const cap = this.openRouterCapabilities.get(modelName);
+        return !!(cap && cap.is_reasoning);
+    }
+
+    /**
+     * Recommend an effective max_tokens for a model. Reasoning models spend part
+     * of the budget on hidden reasoning tokens, so a small requested budget can
+     * leave no room for the answer. This raises it to a floor for such models.
+     * @param {string} modelName
+     * @param {number|null|undefined} requested requested max_tokens
+     * @returns {number|null|undefined} effective max_tokens
+     */
+    recommendMaxTokens(modelName, requested) {
+        if (requested == null) {
+            return requested;
+        }
+        if (this.isReasoningModel(modelName)) {
+            const floor = parseInt(process.env.REASONING_MIN_TOKENS, 10) || 1024;
+            return Math.max(requested, floor);
+        }
+        return requested;
     }
 
     /**
@@ -65,6 +97,15 @@ class IntelligentModelSelector {
         }
         if (taskType === 'audio' || requirements.requiresAudio) {
             score += caps.audio ? 15 : -15;
+        }
+        // Reasoning models excel at hard tasks but are overkill (and can produce
+        // empty answers on tiny budgets) for casual chat/translation.
+        if (cap.is_reasoning) {
+            if (['reasoning', 'math', 'analysis', 'coding'].includes(taskType)) {
+                score += 8;
+            } else if (['conversation', 'translation'].includes(taskType)) {
+                score -= 8;
+            }
         }
         // Larger context windows help analysis/reasoning tasks.
         if ((taskType === 'analysis' || taskType === 'reasoning') && cap.context_length) {

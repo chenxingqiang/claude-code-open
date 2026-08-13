@@ -67,31 +67,52 @@ describe('OpenRouterClient', () => {
   describe('extractDeltaFromLine', () => {
     test('parses content deltas', () => {
       expect(OpenRouterClient.extractDeltaFromLine('data: {"choices":[{"delta":{"content":"Hi"}}]}'))
-        .toEqual({ done: false, content: 'Hi' });
+        .toEqual({ done: false, content: 'Hi', reasoning: '' });
     });
     test('detects [DONE]', () => {
-      expect(OpenRouterClient.extractDeltaFromLine('data: [DONE]')).toEqual({ done: true, content: '' });
+      expect(OpenRouterClient.extractDeltaFromLine('data: [DONE]')).toEqual({ done: true, content: '', reasoning: '' });
     });
     test('ignores non-data and malformed lines', () => {
-      expect(OpenRouterClient.extractDeltaFromLine(': comment')).toEqual({ done: false, content: '' });
-      expect(OpenRouterClient.extractDeltaFromLine('data: {bad json')).toEqual({ done: false, content: '' });
+      expect(OpenRouterClient.extractDeltaFromLine(': comment')).toEqual({ done: false, content: '', reasoning: '' });
+      expect(OpenRouterClient.extractDeltaFromLine('data: {bad json')).toEqual({ done: false, content: '', reasoning: '' });
+    });
+    test('extracts reasoning deltas', () => {
+      expect(OpenRouterClient.extractDeltaFromLine('data: {"choices":[{"delta":{"reasoning":"thinking"}}]}'))
+        .toEqual({ done: false, content: '', reasoning: 'thinking' });
     });
   });
 
   describe('streamCompletion', () => {
-    test('yields content deltas parsed from the SSE body', async () => {
-      async function* body() {
+    function bodyFactory() {
+      return (async function* () {
+        yield Buffer.from('data: {"choices":[{"delta":{"reasoning":"why"}}]}\n');
         yield Buffer.from('data: {"choices":[{"delta":{"content":"Hello"}}]}\n');
         yield Buffer.from('data: {"choices":[{"delta":{"content":" world"}}]}\n');
         yield Buffer.from('data: [DONE]\n');
-      }
-      const fetchImpl = jest.fn().mockResolvedValue({ ok: true, status: 200, body: body() });
+      })();
+    }
+
+    test('default mode yields only content text', async () => {
+      const fetchImpl = jest.fn().mockResolvedValue({ ok: true, status: 200, body: bodyFactory() });
       const client = new OpenRouterClient({ apiKey: 'sk-test', fetchImpl });
       const chunks = [];
       for await (const c of client.streamCompletion({ model: 'openai/gpt-4o', messages: [] })) {
         chunks.push(c);
       }
       expect(chunks.join('')).toBe('Hello world');
+    });
+
+    test('detailed mode yields content and reasoning parts', async () => {
+      const fetchImpl = jest.fn().mockResolvedValue({ ok: true, status: 200, body: bodyFactory() });
+      const client = new OpenRouterClient({ apiKey: 'sk-test', fetchImpl });
+      const parts = [];
+      for await (const p of client.streamCompletion({ model: 'openai/gpt-4o', messages: [] }, { detailed: true })) {
+        parts.push(p);
+      }
+      const reasoning = parts.map(p => p.reasoning).join('');
+      const content = parts.map(p => p.content).join('');
+      expect(reasoning).toBe('why');
+      expect(content).toBe('Hello world');
     });
   });
 });

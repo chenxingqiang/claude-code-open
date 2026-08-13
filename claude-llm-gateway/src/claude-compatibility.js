@@ -129,6 +129,7 @@ class ClaudeCompatibility {
       // Extract response content
       const content = this.extractContent(llmResponse);
       const usage = this.extractUsage(llmResponse);
+      const reasoning = this.extractReasoning(llmResponse);
 
       // Build Claude format response
       const claudeResponse = {
@@ -149,6 +150,11 @@ class ClaudeCompatibility {
           output_tokens: usage.output_tokens || 0
         }
       };
+
+      // Optionally surface the model's reasoning summary (reasoning models).
+      if (process.env.EXPOSE_REASONING === 'true' && reasoning) {
+        claudeResponse.reasoning = reasoning;
+      }
 
       console.log(`🔄 conversion响应: ${provider} -> Claude`);
       return claudeResponse;
@@ -277,6 +283,21 @@ class ClaudeCompatibility {
     }
 
     return 'Unable to extract response content';
+  }
+
+  /**
+   * Extract a reasoning summary from an OpenAI-compatible response, if present.
+   * @param {object} response
+   * @returns {string} reasoning text, or '' when absent.
+   */
+  extractReasoning(response) {
+    if (response && response.choices && response.choices[0] && response.choices[0].message) {
+      const msg = response.choices[0].message;
+      if (typeof msg.reasoning === 'string') {
+        return msg.reasoning;
+      }
+    }
+    return '';
   }
 
   /**

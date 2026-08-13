@@ -70,3 +70,39 @@ describe('IntelligentModelSelector.applyOpenRouterCapabilities', () => {
     expect(selector.scoreFromOpenRouter('nope/unknown', 'coding', {})).toBe(0);
   });
 });
+
+describe('IntelligentModelSelector reasoning awareness', () => {
+  const reasoningModel = {
+    id: 'x/reasoner', canonical_slug: 'x/reasoner', short_slug: 'reasoner',
+    capabilities: { chat: true }, context_length: 128000, cost_per_1k_tokens: 0.001,
+    supported_parameters: ['temperature', 'reasoning', 'include_reasoning']
+  };
+  const plainModel = {
+    id: 'x/chat', canonical_slug: 'x/chat', short_slug: 'chat',
+    capabilities: { chat: true }, context_length: 8000, cost_per_1k_tokens: 0.001,
+    supported_parameters: ['temperature']
+  };
+
+  test('detects reasoning models from supported_parameters', () => {
+    const s = new IntelligentModelSelector();
+    s.applyOpenRouterCapabilities([reasoningModel, plainModel]);
+    expect(s.isReasoningModel('x/reasoner')).toBe(true);
+    expect(s.isReasoningModel('x/chat')).toBe(false);
+  });
+
+  test('recommendMaxTokens raises the budget for reasoning models', () => {
+    const s = new IntelligentModelSelector();
+    s.applyOpenRouterCapabilities([reasoningModel, plainModel]);
+    expect(s.recommendMaxTokens('x/reasoner', 40)).toBe(1024); // raised to floor
+    expect(s.recommendMaxTokens('x/reasoner', 4000)).toBe(4000); // already enough
+    expect(s.recommendMaxTokens('x/chat', 40)).toBe(40); // non-reasoning unchanged
+    expect(s.recommendMaxTokens('x/reasoner', null)).toBeNull();
+  });
+
+  test('reasoning models are preferred for reasoning tasks, deprioritized for chat', () => {
+    const s = new IntelligentModelSelector();
+    s.applyOpenRouterCapabilities([reasoningModel, plainModel]);
+    expect(s.scoreFromOpenRouter('x/reasoner', 'reasoning', {}))
+      .toBeGreaterThan(s.scoreFromOpenRouter('x/reasoner', 'conversation', {}));
+  });
+});

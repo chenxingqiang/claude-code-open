@@ -1,5 +1,3 @@
-const { LLMInterface } = require('llm-interface');
-
 class ProviderRouter {
   constructor() {
     this.providerConfig = new Map();
@@ -7,18 +5,17 @@ class ProviderRouter {
     this.requestCounts = new Map();
     this.lastHealthCheck = null;
     this.roundRobinIndex = 0;
-    // Call backend that drives health semantics ('llm-interface' | 'openrouter').
-    this.callBackend = 'llm-interface';
+    // OpenRouter client used to derive dynamic provider health.
     this.openRouterClient = null;
   }
 
   /**
-   * Configure which call backend health checks should reflect.
-   * @param {string} backend 'openrouter' | 'llm-interface'
+   * Provide the OpenRouter client that drives dynamic provider health.
+   * (Signature kept as setCallBackend for compatibility with existing callers.)
+   * @param {string} _backend Unused; retained for call-site compatibility.
    * @param {object} [openRouterClient] client exposing isConfigured().
    */
-  setCallBackend(backend, openRouterClient = null) {
-    this.callBackend = (backend || 'llm-interface').toLowerCase();
+  setCallBackend(_backend, openRouterClient = null) {
     this.openRouterClient = openRouterClient;
   }
 
@@ -294,88 +291,18 @@ class ProviderRouter {
   }
 
   /**
-   * Check individual provider health status
+   * Check individual provider health status. Health reflects the single dynamic
+   * OpenRouter dependency: a provider is usable when OPENROUTER_API_KEY is set.
    */
   async checkProviderHealth(provider) {
-    // Dynamic backend: health reflects the single OpenRouter dependency rather
-    // than a per-vendor ping. A provider is usable when OPENROUTER_API_KEY is set.
-    if (this.callBackend === 'openrouter') {
-      const configured = this.openRouterClient && this.openRouterClient.isConfigured();
-      this.healthStatus.set(provider, {
-        healthy: !!configured,
-        lastCheck: Date.now(),
-        responseTime: 0,
-        error: configured ? null : 'OPENROUTER_API_KEY not configured',
-        status: configured ? 'openrouter' : 'no_api_key'
-      });
-      return;
-    }
-
-    try {
-      const startTime = Date.now();
-      
-      // Send simple ping request
-      const testMessage = 'ping';
-      const response = await LLMInterface.sendMessage(provider, testMessage, {
-        max_tokens: 5,
-        timeout: 10000 // 10 seconds timeout
-      });
-
-      const responseTime = Date.now() - startTime;
-
-      // Record health status
-      this.healthStatus.set(provider, {
-        healthy: true,
-        lastCheck: Date.now(),
-        responseTime: responseTime,
-        error: null
-      });
-
-      console.log(`✅ ${provider}: healthy (${responseTime}ms)`);
-
-    } catch (error) {
-      // Determine error type and provide friendly message
-      let status = 'unhealthy';
-      let friendlyMessage = error.message;
-      
-      // Check for authentication/API key errors
-      if (error.message.includes('HTTP 401') || error.message.includes('HTTP 403') || 
-          error.message.includes('Unauthorized') || error.message.includes('Forbidden') ||
-          error.message.includes('API key not found') || error.message.includes('Invalid API key') ||
-          error.message.includes('Authentication failed') || error.message.includes('Access denied')) {
-        status = 'no_api_key';
-        friendlyMessage = 'API key not configured or invalid';
-      } 
-      // Check for network/connection errors
-      else if (error.message.includes('HTTP 404') || error.message.includes('Not Found') ||
-               error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND') ||
-               error.message.includes('ECONNRESET') || error.message.includes('ETIMEDOUT')) {
-        status = 'unreachable';
-        friendlyMessage = 'Service unavailable or not configured';
-      }
-      // Check for rate limiting
-      else if (error.message.includes('HTTP 429') || error.message.includes('Rate limit') ||
-               error.message.includes('Too many requests')) {
-        status = 'rate_limited';
-        friendlyMessage = 'Rate limit exceeded';
-      }
-      
-      // Record status with friendly message
-      this.healthStatus.set(provider, {
-        healthy: false,
-        lastCheck: Date.now(),
-        responseTime: null,
-        error: friendlyMessage,
-        status: status
-      });
-
-      // Display appropriate emoji and message
-      const emoji = status === 'no_api_key' ? '🔑' : 
-                    status === 'unreachable' ? '🔌' : 
-                    status === 'rate_limited' ? '⏳' : '❌';
-      
-      console.log(`${emoji} ${provider}: ${friendlyMessage}`);
-    }
+    const configured = this.openRouterClient && this.openRouterClient.isConfigured();
+    this.healthStatus.set(provider, {
+      healthy: !!configured,
+      lastCheck: Date.now(),
+      responseTime: 0,
+      error: configured ? null : 'OPENROUTER_API_KEY not configured',
+      status: configured ? 'openrouter' : 'no_api_key'
+    });
   }
 
   /**

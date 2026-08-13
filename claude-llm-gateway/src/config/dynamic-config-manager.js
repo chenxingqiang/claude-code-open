@@ -1,6 +1,3 @@
-const {
-    LLMInterface
-} = require('llm-interface');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
@@ -584,7 +581,6 @@ class DynamicConfigManager {
             
             const configData = {
                 generated_at: new Date().toISOString(), 
-                llm_interface_version: await this.getLLMInterfaceVersion(), 
                 model_source: this.lastSyncInfo && this.lastSyncInfo.ok ? 'openrouter' : 'static',
                 openrouter_synced_at: this.lastSyncInfo ? this.lastSyncInfo.synced_at : null,
                 openrouter_total_models: this.lastSyncInfo ? this.lastSyncInfo.total_models : 0,
@@ -598,19 +594,6 @@ class DynamicConfigManager {
         } catch (error) {
             console.error('❌ Failed to save configuration:', error);
             throw error;
-        }
-    } 
-
-    /** 
-     * Get llm-interface package version 
-     */
-    async getLLMInterfaceVersion() {
-        try {
-            const packagePath = require.resolve('llm-interface/package.json');
-            const packageData = JSON.parse(await fs.readFile(packagePath, 'utf8'));
-            return packageData.version;
-        } catch (error) {
-            return 'unknown';
         }
     } 
 

@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { LLMInterface } = require('llm-interface');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -21,11 +20,10 @@ class ClaudeLLMGateway {
     this.claudeCompat = new ClaudeCompatibility();
     this.providerRouter = new ProviderRouter();
     this.modelSelector = new IntelligentModelSelector();
-    // Dynamic call layer: send completions through OpenRouter's unified
-    // endpoint using the synced model id, instead of statically injecting
-    // per-vendor keys into llm-interface. Switch back with CALL_BACKEND.
+    // Dynamic call layer: all completions go through OpenRouter's unified
+    // endpoint using the synced model id (single OPENROUTER_API_KEY). The old
+    // per-vendor llm-interface injection has been removed.
     this.openRouterClient = new OpenRouterClient();
-    this.callBackend = (process.env.CALL_BACKEND || 'openrouter').toLowerCase();
     this.providers = new Map();
     this.requestLog = new Map();
   }
@@ -78,16 +76,9 @@ class ClaudeLLMGateway {
         throw new Error('Unable to load provider configuration');
       }
       
-      // Only statically inject per-vendor keys into llm-interface when that is
-      // the selected call backend. The dynamic OpenRouter backend needs none.
-      if (this.callBackend === 'llm-interface') {
-        const apiKeys = this.extractApiKeys(config.providers);
-        LLMInterface.setApiKey(apiKeys);
-      }
-
-      // Tell the router which call backend drives health semantics.
+      // Provider health reflects the single OpenRouter dependency.
       if (typeof this.providerRouter.setCallBackend === 'function') {
-        this.providerRouter.setCallBackend(this.callBackend, this.openRouterClient);
+        this.providerRouter.setCallBackend('openrouter', this.openRouterClient);
       }
       
       // Initialize provider router
@@ -172,55 +163,6 @@ class ClaudeLLMGateway {
       this._modelSyncTimer.unref();
     }
     console.log(`🗓️  Model-info auto-refresh scheduled every ${minutes} minute(s)`);
-  }
-
-  /**
-   * Extract API keys
-   */
-  extractApiKeys(providers) {
-    const apiKeys = {};
-    
-    if (!providers || typeof providers !== 'object') {
-      console.warn('⚠️  No providers configuration found');
-      return apiKeys;
-    }
-    
-    for (const [name, config] of Object.entries(providers)) {
-      if (config.enabled && config.requires_api_key) {
-        const envVar = this.getApiKeyEnvVar(name);
-        if (process.env[envVar]) {
-          apiKeys[name] = process.env[envVar];
-        }
-      } else if (!config.requires_api_key) {
-        // For providers that don't require API keys (like Ollama)
-        apiKeys[name] = 'local';
-      }
-    }
-    
-    return apiKeys;
-  }
-
-  /**
-   * Get API key environment variable name
-   */
-  getApiKeyEnvVar(providerName) {
-    const envVars = {
-      'openai': 'OPENAI_API_KEY',
-      'anthropic': 'ANTHROPIC_API_KEY',
-      'google': 'GOOGLE_API_KEY',
-      'cohere': 'COHERE_API_KEY',
-      'huggingface': 'HUGGINGFACE_API_KEY',
-      'mistral': 'MISTRAL_API_KEY',
-      'groq': 'GROQ_API_KEY',
-      'perplexity': 'PERPLEXITY_API_KEY',
-      'ai21': 'AI21_API_KEY',
-      'nvidia': 'NVIDIA_API_KEY',
-      'fireworks': 'FIREWORKS_API_KEY',
-      'together': 'TOGETHER_API_KEY',
-      'replicate': 'REPLICATE_API_KEY'
-    };
-    
-    return envVars[providerName] || `${providerName.toUpperCase()}_API_KEY`;
   }
 
   /**
@@ -379,6 +321,16 @@ class ClaudeLLMGateway {
       
       // Record request
       this.providerRouter.recordRequest(provider);
+
+      // Give reasoning models enough headroom so hidden reasoning tokens don't
+      // consume the whole budget and leave an empty answer.
+      if (typeof this.modelSelector.recommendMaxTokens === 'function' && req.body.max_tokens != null) {
+        const effMax = this.modelSelector.recommendMaxTokens(modelSelection.selectedModel, req.body.max_tokens);
+        if (effMax !== req.body.max_tokens) {
+          console.log(`🧵 Reasoning headroom: max_tokens ${req.body.max_tokens} -> ${effMax} for ${modelSelection.selectedModel} [${requestId}]`);
+          req.body.max_tokens = effMax;
+        }
+      }
       
       // Transform request format with selected model and intelligent token management
       const llmRequest = this.claudeCompat.toLLMInterface(
@@ -389,7 +341,7 @@ class ClaudeLLMGateway {
         modelSelection.complexity || 'medium'
       );
       
-      // Call llm-interface
+      // Dispatch via the dynamic OpenRouter call layer
       console.log(`🚀 Sending request to ${provider} [${requestId}]`);
       const startTime = Date.now();
       
@@ -421,28 +373,23 @@ class ClaudeLLMGateway {
   }
 
   /**
-   * Dispatch a (non-streaming) completion through the configured call backend.
-   * - openrouter: send to OpenRouter's unified endpoint using the model id.
-   * - llm-interface: legacy per-vendor dispatch with statically injected keys.
-   * @param {string} provider Selected provider (used by the llm-interface backend).
+   * Dispatch a (non-streaming) completion through the dynamic OpenRouter layer.
+   * @param {string} provider Selected provider (informational).
    * @param {object} llmRequest Transformed request (model, messages, params).
    * @returns {Promise<object>} OpenAI-compatible response.
    */
   async dispatchCompletion(provider, llmRequest) {
-    if (this.callBackend === 'openrouter') {
-      if (!this.openRouterClient.isConfigured()) {
-        throw new Error('OPENROUTER_API_KEY not configured (set it, or switch CALL_BACKEND=llm-interface)');
-      }
-      return this.openRouterClient.chatCompletion({
-        model: llmRequest.model,
-        messages: llmRequest.messages,
-        max_tokens: llmRequest.max_tokens,
-        temperature: llmRequest.temperature,
-        top_p: llmRequest.top_p,
-        stop: llmRequest.stop
-      });
+    if (!this.openRouterClient.isConfigured()) {
+      throw new Error('OPENROUTER_API_KEY not configured');
     }
-    return LLMInterface.sendMessage(provider, llmRequest);
+    return this.openRouterClient.chatCompletion({
+      model: llmRequest.model,
+      messages: llmRequest.messages,
+      max_tokens: llmRequest.max_tokens,
+      temperature: llmRequest.temperature,
+      top_p: llmRequest.top_p,
+      stop: llmRequest.stop
+    });
   }
 
   /**
@@ -456,36 +403,31 @@ class ClaudeLLMGateway {
       
       // Send start event
       res.write(`data: {"type": "message_start", "message": {"id": "${requestId}"}}\n\n`);
-      
-      if (this.callBackend === 'openrouter') {
-        if (!this.openRouterClient.isConfigured()) {
-          throw new Error('OPENROUTER_API_KEY not configured (set it, or switch CALL_BACKEND=llm-interface)');
+
+      if (!this.openRouterClient.isConfigured()) {
+        throw new Error('OPENROUTER_API_KEY not configured');
+      }
+      const exposeReasoning = process.env.EXPOSE_REASONING === 'true';
+      // Stream deltas from OpenRouter and re-emit as Claude deltas. When
+      // EXPOSE_REASONING is on, reasoning tokens are emitted as thinking deltas.
+      for await (const part of this.openRouterClient.streamCompletion({
+        model: llmRequest.model,
+        messages: llmRequest.messages,
+        max_tokens: llmRequest.max_tokens,
+        temperature: llmRequest.temperature,
+        top_p: llmRequest.top_p,
+        stop: llmRequest.stop
+      }, { detailed: exposeReasoning })) {
+        // In detailed mode parts are { content, reasoning }; otherwise a string.
+        if (typeof part === 'string') {
+          res.write(`data: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: part } })}\n\n`);
+          continue;
         }
-        // Stream text deltas from OpenRouter and re-emit as Claude deltas.
-        for await (const delta of this.openRouterClient.streamCompletion({
-          model: llmRequest.model,
-          messages: llmRequest.messages,
-          max_tokens: llmRequest.max_tokens,
-          temperature: llmRequest.temperature,
-          top_p: llmRequest.top_p,
-          stop: llmRequest.stop
-        })) {
-          const claudeChunk = {
-            type: 'content_block_delta',
-            index: 0,
-            delta: { type: 'text_delta', text: delta }
-          };
-          res.write(`data: ${JSON.stringify(claudeChunk)}\n\n`);
+        if (part.reasoning) {
+          res.write(`data: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', text: part.reasoning } })}\n\n`);
         }
-      } else {
-        // Legacy llm-interface streaming
-        const stream = await LLMInterface.sendMessage(provider, {
-          ...llmRequest,
-          stream: true
-        });
-        for await (const chunk of stream) {
-          const claudeChunk = this.claudeCompat.convertStreamResponse(chunk, provider);
-          res.write(claudeChunk);
+        if (part.content) {
+          res.write(`data: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: part.content } })}\n\n`);
         }
       }
       
@@ -728,7 +670,7 @@ class ClaudeLLMGateway {
     return res.json({
       name: 'Claude LLM Gateway',
       version: require('../package.json').version,
-      description: 'Multi-LLM API Gateway for Claude Code using llm-interface',
+      description: 'Multi-LLM API Gateway for Claude Code (dynamic OpenRouter backend)',
       endpoints: {
         messages: '/v1/messages',
         chat: '/v1/chat/completions',

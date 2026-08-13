@@ -117,32 +117,34 @@ class OpenRouterClient {
   static extractDeltaFromLine(line) {
     const trimmed = (line || '').trim();
     if (!trimmed.startsWith('data:')) {
-      return { done: false, content: '' };
+      return { done: false, content: '', reasoning: '' };
     }
     const payload = trimmed.slice(5).trim();
     if (payload === '[DONE]') {
-      return { done: true, content: '' };
+      return { done: true, content: '', reasoning: '' };
     }
     try {
       const json = JSON.parse(payload);
-      const content = json.choices && json.choices[0] && json.choices[0].delta
-        ? (json.choices[0].delta.content || '')
-        : '';
-      return { done: false, content };
+      const delta = json.choices && json.choices[0] && json.choices[0].delta ? json.choices[0].delta : {};
+      return { done: false, content: delta.content || '', reasoning: delta.reasoning || '' };
     } catch (e) {
-      return { done: false, content: '' };
+      return { done: false, content: '', reasoning: '' };
     }
   }
 
   /**
-   * Perform a streaming chat completion, yielding text deltas.
+   * Perform a streaming chat completion.
    * @param {object} params
-   * @returns {AsyncGenerator<string>} text content deltas.
+   * @param {object} [options]
+   * @param {boolean} [options.detailed] When true, yields { content, reasoning }
+   *   objects (reasoning included); otherwise yields content text strings only.
+   * @returns {AsyncGenerator<string|{content: string, reasoning: string}>}
    */
-  async *streamCompletion(params) {
+  async *streamCompletion(params, options = {}) {
     if (!this.isConfigured()) {
       throw new Error('OPENROUTER_API_KEY not configured');
     }
+    const detailed = !!options.detailed;
     const url = `${this.apiBaseUrl.replace(/\/$/, '')}/chat/completions`;
     const response = await this.fetchImpl(url, {
       method: 'POST',
@@ -155,21 +157,30 @@ class OpenRouterClient {
     }
 
     let buffer = '';
+    const emit = (content, reasoning) => (detailed ? { content, reasoning } : content);
     for await (const chunk of response.body) {
       buffer += chunk.toString('utf8');
       let idx;
       while ((idx = buffer.indexOf('\n')) >= 0) {
         const line = buffer.slice(0, idx);
         buffer = buffer.slice(idx + 1);
-        const { done, content } = OpenRouterClient.extractDeltaFromLine(line);
+        const { done, content, reasoning } = OpenRouterClient.extractDeltaFromLine(line);
         if (done) return;
-        if (content) yield content;
+        if (detailed) {
+          if (content || reasoning) yield emit(content, reasoning);
+        } else if (content) {
+          yield content;
+        }
       }
     }
     // Flush any trailing buffered line.
     if (buffer) {
-      const { content } = OpenRouterClient.extractDeltaFromLine(buffer);
-      if (content) yield content;
+      const { content, reasoning } = OpenRouterClient.extractDeltaFromLine(buffer);
+      if (detailed) {
+        if (content || reasoning) yield emit(content, reasoning);
+      } else if (content) {
+        yield content;
+      }
     }
   }
 
