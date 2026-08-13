@@ -12,8 +12,11 @@
  */
 
 const defaultFetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
 
 const DEFAULT_API_BASE_URL = 'https://openrouter.ai/api/v1';
+const DEFAULT_CACHE_PATH = path.join(__dirname, '..', 'config', 'openrouter-cache.json');
 
 /**
  * Maps an OpenRouter author namespace (the part before "/" in a model id, e.g.
@@ -52,6 +55,45 @@ class OpenRouterModelSync {
     this.timeout = options.timeout || parseInt(process.env.OPENROUTER_TIMEOUT_MS, 10) || 20000;
     this.fetchImpl = options.fetchImpl || defaultFetch;
     this.logger = options.logger || console;
+    // Local disk cache used to serve the last good catalog when the API is
+    // unreachable, and to avoid hammering the API right after a failure.
+    this.cachePath = options.cachePath || process.env.OPENROUTER_CACHE_PATH || DEFAULT_CACHE_PATH;
+    this.backoffMs = options.backoffMs != null
+      ? options.backoffMs
+      : (parseInt(process.env.OPENROUTER_BACKOFF_MS, 10) || 5 * 60 * 1000);
+    this.fs = options.fsImpl || fs;
+    this.now = options.now || (() => Date.now());
+    this._lastFailureAt = 0;
+  }
+
+  /**
+   * Read the cached catalog from disk. Never throws.
+   * @returns {{cached_at: number, catalog: object}|null}
+   */
+  readCache() {
+    try {
+      const raw = this.fs.readFileSync(this.cachePath, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.catalog && Array.isArray(parsed.catalog.models)) {
+        return parsed;
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Write the catalog to the disk cache. Never throws.
+   * @param {object} catalog
+   */
+  writeCache(catalog) {
+    try {
+      this.fs.mkdirSync(path.dirname(this.cachePath), { recursive: true });
+      this.fs.writeFileSync(this.cachePath, JSON.stringify({ cached_at: this.now(), catalog }, null, 2));
+    } catch (error) {
+      this.logger.warn(`⚠️ Failed to write OpenRouter cache: ${error.message}`);
+    }
   }
 
   /**
@@ -214,11 +256,11 @@ class OpenRouterModelSync {
   }
 
   /**
-   * Fetch, normalize and group the OpenRouter catalog.
+   * Fetch, normalize and group the live OpenRouter catalog (no cache/backoff).
    * @returns {Promise<{source: string, fetched_at: string, total_models: number, providers: object, models: object[]}>}
-   * @throws {Error} when the fetch fails (callers should fall back to static config).
+   * @throws {Error} when the fetch fails.
    */
-  async buildProviderCatalog() {
+  async fetchAndBuild() {
     const raw = await this.fetchAllModels();
     const normalized = raw.map(m => this.normalizeModel(m)).filter(Boolean);
     const providers = this.groupByProvider(normalized);
@@ -229,6 +271,43 @@ class OpenRouterModelSync {
       providers,
       models: normalized
     };
+  }
+
+  /**
+   * Build the provider catalog with disk caching and failure backoff:
+   * - Within the backoff window after a recent failure, avoid the network and
+   *   serve the cached catalog (if any).
+   * - On a successful fetch, refresh the disk cache.
+   * - On a failed fetch, fall back to the cached catalog when available.
+   * Only throws when there is no usable cache to fall back to.
+   * @returns {Promise<object>} catalog, annotated with from_cache/stale flags.
+   */
+  async buildProviderCatalog() {
+    const now = this.now();
+
+    // Backoff: skip the network shortly after a failure and use the cache.
+    if (this._lastFailureAt && (now - this._lastFailureAt) < this.backoffMs) {
+      const cached = this.readCache();
+      if (cached) {
+        return { ...cached.catalog, from_cache: true, stale: true, cached_at: cached.cached_at };
+      }
+      throw new Error('OpenRouter unavailable (in backoff window) and no cache present');
+    }
+
+    try {
+      const catalog = await this.fetchAndBuild();
+      this._lastFailureAt = 0;
+      this.writeCache(catalog);
+      return { ...catalog, from_cache: false };
+    } catch (error) {
+      this._lastFailureAt = this.now();
+      const cached = this.readCache();
+      if (cached) {
+        this.logger.warn(`⚠️ OpenRouter fetch failed (${error.message}); serving cached catalog`);
+        return { ...cached.catalog, from_cache: true, stale: true, cached_at: cached.cached_at };
+      }
+      throw error;
+    }
   }
 }
 

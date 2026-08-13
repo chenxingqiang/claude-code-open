@@ -42,9 +42,11 @@ class DynamicConfigManager {
                 source: 'openrouter',
                 synced_at: catalog.fetched_at,
                 total_models: catalog.total_models,
+                from_cache: !!catalog.from_cache,
                 ok: true
             };
-            console.log(`🌐 OpenRouter sync: ${catalog.total_models} models across ${Object.keys(catalog.providers).length} providers`);
+            const via = catalog.from_cache ? ' (from cache)' : '';
+            console.log(`🌐 OpenRouter sync: ${catalog.total_models} models across ${Object.keys(catalog.providers).length} providers${via}`);
             return catalog;
         } catch (error) {
             this.lastSyncInfo = {

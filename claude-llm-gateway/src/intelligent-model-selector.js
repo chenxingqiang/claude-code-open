@@ -11,7 +11,73 @@ class IntelligentModelSelector {
         this.modelAliases = this.initializeModelAliases();
         this.modelPricing = this.initializeModelPricing();
         this.priorityMode = 'balanced'; // 'speed', 'quality', 'cost', 'balanced'
+        // Live capability/metadata for models synced from OpenRouter, keyed by
+        // model id / canonical slug / short slug. Populated at runtime.
+        this.openRouterCapabilities = new Map();
         this.loadPerformanceData();
+    }
+
+    /**
+     * Register live model capability/metadata from an OpenRouter catalog so the
+     * selector can reason about vision/audio support, context length and cost
+     * for models that are not in the hardcoded modelCapabilities table.
+     * @param {Array<object>} normalizedModels OpenRouterModelSync catalog models.
+     * @returns {number} number of capability keys added or updated.
+     */
+    applyOpenRouterCapabilities(normalizedModels) {
+        if (!Array.isArray(normalizedModels)) {
+            return 0;
+        }
+        let updated = 0;
+        for (const model of normalizedModels) {
+            if (!model || !model.id) {
+                continue;
+            }
+            const entry = {
+                capabilities: model.capabilities || {},
+                context_length: model.context_length != null ? model.context_length : null,
+                input_modalities: Array.isArray(model.input_modalities) ? model.input_modalities : [],
+                cost_per_1k_tokens: model.cost_per_1k_tokens
+            };
+            const keys = new Set([model.id, model.canonical_slug, model.short_slug].filter(Boolean));
+            for (const key of keys) {
+                this.openRouterCapabilities.set(key, entry);
+                updated += 1;
+            }
+        }
+        return updated;
+    }
+
+    /**
+     * Score a model using live OpenRouter capability metadata. Used when a model
+     * is not present in the hardcoded modelCapabilities table.
+     */
+    scoreFromOpenRouter(modelName, taskType, requirements = {}) {
+        const cap = this.openRouterCapabilities.get(modelName);
+        if (!cap) {
+            return 0;
+        }
+        const caps = cap.capabilities || {};
+        let score = 50;
+
+        if (taskType === 'vision' || requirements.requiresVision) {
+            score += caps.vision ? 20 : -30;
+        }
+        if (taskType === 'audio' || requirements.requiresAudio) {
+            score += caps.audio ? 15 : -15;
+        }
+        // Larger context windows help analysis/reasoning tasks.
+        if ((taskType === 'analysis' || taskType === 'reasoning') && cap.context_length) {
+            if (cap.context_length >= 200000) score += 10;
+            else if (cap.context_length >= 64000) score += 5;
+        }
+        // Prefer cheaper models when cost is prioritized.
+        if (requirements.prioritizeCost && Number.isFinite(cap.cost_per_1k_tokens)) {
+            if (cap.cost_per_1k_tokens === 0) score += 10;
+            else if (cap.cost_per_1k_tokens < 0.001) score += 6;
+            else if (cap.cost_per_1k_tokens < 0.01) score += 3;
+        }
+        return Math.max(0, score);
     }
 
     /**
@@ -1055,7 +1121,9 @@ class IntelligentModelSelector {
      */
     calculateModelScore(modelName, taskType, requirements = {}) {
         const modelInfo = this.modelCapabilities[modelName];
-        if (!modelInfo) return 0;
+        // Fall back to live OpenRouter capability data for models that are not
+        // in the hardcoded table (e.g. auto-synced ids like "openai/gpt-4o").
+        if (!modelInfo) return this.scoreFromOpenRouter(modelName, taskType, requirements);
 
         let score = modelInfo.baseScore;
 
@@ -1094,9 +1162,20 @@ class IntelligentModelSelector {
     selectBestModel(userInput, systemPrompt = '', availableModels = [], requirements = {}) {
         // Detect task type
         const taskDetection = this.detectTaskType(userInput, systemPrompt);
+
+        // For vision tasks, prefer models that actually support image input when
+        // the live capability data lets us tell them apart. Falls back to the
+        // full list if none are known to be vision-capable.
+        let candidateModels = availableModels;
+        if ((taskDetection.taskType === 'vision' || requirements.requiresVision) && this.openRouterCapabilities.size > 0) {
+            const visionModels = availableModels.filter(m => this.openRouterCapabilities.get(m)?.capabilities?.vision);
+            if (visionModels.length > 0) {
+                candidateModels = visionModels;
+            }
+        }
         
         // Score all available models
-        const modelScores = availableModels.map(modelName => ({
+        const modelScores = candidateModels.map(modelName => ({
             model: modelName,
             score: this.calculateModelScore(modelName, taskDetection.taskType, requirements),
             taskType: taskDetection.taskType,
@@ -1107,7 +1186,7 @@ class IntelligentModelSelector {
         modelScores.sort((a, b) => b.score - a.score);
 
         const result = {
-            selectedModel: modelScores[0]?.model || availableModels[0],
+            selectedModel: modelScores[0]?.model || candidateModels[0] || availableModels[0],
             taskType: taskDetection.taskType,
             confidence: taskDetection.confidence,
             reasoning: this.generateReasoning(modelScores[0], taskDetection),

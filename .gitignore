@@ -27,3 +27,5 @@ node_modules/
 
 # Auto-generated model catalog (regenerated at runtime from OpenRouter / static defaults)
 claude-llm-gateway/config/providers.json
+# Local OpenRouter catalog cache (runtime fallback)
+claude-llm-gateway/config/openrouter-cache.json

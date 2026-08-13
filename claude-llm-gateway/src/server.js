@@ -122,6 +122,10 @@ class ClaudeLLMGateway {
         const updated = this.modelSelector.applyOpenRouterPricing(allDetails);
         console.log(`💲 Synced pricing for ${updated} model keys from live catalog`);
       }
+      if (allDetails.length > 0 && typeof this.modelSelector.applyOpenRouterCapabilities === 'function') {
+        const caps = this.modelSelector.applyOpenRouterCapabilities(allDetails);
+        console.log(`🧩 Synced capabilities for ${caps} model keys from live catalog`);
+      }
     } catch (error) {
       console.warn(`⚠️  Failed to sync model selector pricing: ${error.message}`);
     }

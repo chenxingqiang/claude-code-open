@@ -3,7 +3,14 @@
  * These use an injected fetch implementation so no real network calls are made.
  */
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const OpenRouterModelSync = require('../../src/openrouter-model-sync');
+
+function tempCachePath() {
+  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'orcache-')), 'openrouter-cache.json');
+}
 
 const sampleModels = [
   {
@@ -199,22 +206,71 @@ describe('OpenRouterModelSync', () => {
   });
 
   describe('buildProviderCatalog', () => {
-    test('produces a normalized, grouped catalog', async () => {
+    test('produces a normalized, grouped catalog and writes cache', async () => {
       const fetchImpl = makeFetch({ data: sampleModels });
-      const sync = new OpenRouterModelSync({ fetchImpl });
+      const cachePath = tempCachePath();
+      const sync = new OpenRouterModelSync({ fetchImpl, cachePath });
       const catalog = await sync.buildProviderCatalog();
 
       expect(catalog.source).toBe('openrouter');
       expect(catalog.total_models).toBe(3);
-      expect(catalog.fetched_at).toBeTruthy();
+      expect(catalog.from_cache).toBe(false);
       expect(Object.keys(catalog.providers).sort()).toEqual(['mistral', 'openai']);
       expect(catalog.models).toHaveLength(3);
+      // Cache file was written
+      expect(fs.existsSync(cachePath)).toBe(true);
     });
 
-    test('propagates fetch errors to the caller', async () => {
+    test('propagates fetch errors when no cache is available', async () => {
       const fetchImpl = makeFetch({}, { ok: false, status: 404 });
-      const sync = new OpenRouterModelSync({ fetchImpl });
+      const sync = new OpenRouterModelSync({ fetchImpl, cachePath: tempCachePath(), backoffMs: 0 });
       await expect(sync.buildProviderCatalog()).rejects.toThrow();
+    });
+  });
+
+  describe('disk cache and failure backoff', () => {
+    test('falls back to cached catalog when fetch fails', async () => {
+      const cachePath = tempCachePath();
+      // First: successful fetch populates the cache.
+      const okSync = new OpenRouterModelSync({ fetchImpl: makeFetch({ data: sampleModels }), cachePath });
+      await okSync.buildProviderCatalog();
+
+      // Second: a new instance whose fetch fails should serve the cached data.
+      const failSync = new OpenRouterModelSync({
+        fetchImpl: makeFetch({}, { ok: false, status: 500 }),
+        cachePath,
+        backoffMs: 0
+      });
+      const catalog = await failSync.buildProviderCatalog();
+      expect(catalog.from_cache).toBe(true);
+      expect(catalog.stale).toBe(true);
+      expect(catalog.total_models).toBe(3);
+    });
+
+    test('honors the backoff window and avoids re-fetching after a failure', async () => {
+      const cachePath = tempCachePath();
+      // Seed the cache with a good fetch.
+      await new OpenRouterModelSync({ fetchImpl: makeFetch({ data: sampleModels }), cachePath }).buildProviderCatalog();
+
+      let now = 1000;
+      const fetchImpl = jest.fn().mockRejectedValue(new Error('network down'));
+      const sync = new OpenRouterModelSync({ fetchImpl, cachePath, backoffMs: 60000, now: () => now });
+
+      // First call fails -> records failure, serves cache.
+      const first = await sync.buildProviderCatalog();
+      expect(first.from_cache).toBe(true);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      // Within backoff window: should NOT call fetch again, serves cache.
+      now += 1000;
+      const second = await sync.buildProviderCatalog();
+      expect(second.from_cache).toBe(true);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      // After backoff window: retries the network.
+      now += 60000;
+      await sync.buildProviderCatalog().catch(() => {});
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
   });
 });
