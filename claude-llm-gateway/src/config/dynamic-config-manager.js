@@ -87,7 +87,7 @@ class DynamicConfigManager {
                     // Try to get detailed information for each provider 
                     const providerInfo = await this.getProviderInfo(providerName);
                     providerConfig[providerName] = {
-                        enabled: this.isProviderConfigured(providerName), 
+                        enabled: await this.isProviderConfigured(providerName), 
                         priority: this.calculatePriority(providerName), 
                         models: providerInfo.models || [], 
                         capabilities: providerInfo.capabilities || {}, 
@@ -479,7 +479,7 @@ class DynamicConfigManager {
     /** 
      * 检查provider是否已配置（有API key等） 
      */
-    isProviderConfigured(providerName) {
+    async isProviderConfigured(providerName) {
         const envVars = {
             'openai': 'OPENAI_API_KEY', 
             'anthropic': 'ANTHROPIC_API_KEY', 
@@ -505,12 +505,12 @@ class DynamicConfigManager {
         
         if (providerName === 'ollama') {
             // For Ollama, check if local service is available 
-            return this.checkOllamaAvailability();
+            return await this.checkOllamaAvailability();
         } 
         
         if (providerName === 'llamacpp') {
             // For LLaMA.CPP, check if local service is available 
-            return this.checkLlamaCppAvailability();
+            return await this.checkLlamaCppAvailability();
         } 
         
         return !!process.env[envVar];

@@ -96,6 +96,35 @@ describe('DynamicConfigManager OpenRouter integration', () => {
     expect(config.openai.model_source).toBe('static');
   });
 
+  test('provider "enabled" is always a boolean, including local providers', async () => {
+    // Regression test: isProviderConfigured used to return an un-awaited Promise
+    // for ollama/llamacpp, which serialized to {} instead of a boolean.
+    const { mgr } = tempConfigManager({ openRouterSyncEnabled: false });
+    const config = await mgr.discoverProviders();
+
+    for (const [name, entry] of Object.entries(config)) {
+      expect(typeof entry.enabled).toBe('boolean');
+      expect(name && entry).toBeTruthy();
+    }
+    // Local services are unavailable in the test env -> false (not {} / Promise).
+    expect(config.ollama.enabled).toBe(false);
+    expect(config.llamacpp.enabled).toBe(false);
+  });
+
+  test('isProviderConfigured resolves booleans for env-key and local providers', async () => {
+    const { mgr } = tempConfigManager({ openRouterSyncEnabled: false });
+    const prev = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = 'test-key';
+    try {
+      await expect(mgr.isProviderConfigured('openai')).resolves.toBe(true);
+      await expect(mgr.isProviderConfigured('ollama')).resolves.toBe(false);
+      await expect(mgr.isProviderConfigured('llamacpp')).resolves.toBe(false);
+      await expect(mgr.isProviderConfigured('unknown-xyz')).resolves.toBe(false);
+    } finally {
+      if (prev === undefined) { delete process.env.OPENAI_API_KEY; } else { process.env.OPENAI_API_KEY = prev; }
+    }
+  });
+
   test('honors a configurable TTL for shouldUpdateConfig', async () => {
     const { mgr, tmpFile } = tempConfigManager({ configTtlHours: 1 });
     // Write a config that is 2 hours old
