@@ -24,3 +24,6 @@ Thumbs.db
 
 # Dependencies
 node_modules/
+
+# Auto-generated model catalog (regenerated at runtime from OpenRouter / static defaults)
+claude-llm-gateway/config/providers.json
