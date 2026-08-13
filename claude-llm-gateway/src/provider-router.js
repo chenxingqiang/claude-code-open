@@ -7,6 +7,19 @@ class ProviderRouter {
     this.requestCounts = new Map();
     this.lastHealthCheck = null;
     this.roundRobinIndex = 0;
+    // Call backend that drives health semantics ('llm-interface' | 'openrouter').
+    this.callBackend = 'llm-interface';
+    this.openRouterClient = null;
+  }
+
+  /**
+   * Configure which call backend health checks should reflect.
+   * @param {string} backend 'openrouter' | 'llm-interface'
+   * @param {object} [openRouterClient] client exposing isConfigured().
+   */
+  setCallBackend(backend, openRouterClient = null) {
+    this.callBackend = (backend || 'llm-interface').toLowerCase();
+    this.openRouterClient = openRouterClient;
   }
 
   /**
@@ -284,6 +297,20 @@ class ProviderRouter {
    * Check individual provider health status
    */
   async checkProviderHealth(provider) {
+    // Dynamic backend: health reflects the single OpenRouter dependency rather
+    // than a per-vendor ping. A provider is usable when OPENROUTER_API_KEY is set.
+    if (this.callBackend === 'openrouter') {
+      const configured = this.openRouterClient && this.openRouterClient.isConfigured();
+      this.healthStatus.set(provider, {
+        healthy: !!configured,
+        lastCheck: Date.now(),
+        responseTime: 0,
+        error: configured ? null : 'OPENROUTER_API_KEY not configured',
+        status: configured ? 'openrouter' : 'no_api_key'
+      });
+      return;
+    }
+
     try {
       const startTime = Date.now();
       

@@ -68,6 +68,32 @@ describe('DynamicConfigManager OpenRouter integration', () => {
     expect(mgr.getLastSyncInfo().ok).toBe(true);
   });
 
+  test('auto-enables catalog-backed providers under the openrouter backend', async () => {
+    const fakeSync = { buildProviderCatalog: jest.fn().mockResolvedValue(makeCatalog()) };
+    const { mgr } = tempConfigManager({ openRouterSync: fakeSync, callBackend: 'openrouter' });
+    const config = await mgr.discoverProviders();
+    // openai/deepseek come from the catalog -> enabled without any vendor key
+    expect(config.openai.enabled).toBe(true);
+    expect(config.deepseek.enabled).toBe(true);
+    // A provider not in the catalog stays gated by its own config
+    expect(typeof config.cohere.enabled).toBe('boolean');
+  });
+
+  test('does not auto-enable providers under the llm-interface backend', async () => {
+    const fakeSync = { buildProviderCatalog: jest.fn().mockResolvedValue(makeCatalog()) };
+    const { mgr } = tempConfigManager({ openRouterSync: fakeSync, callBackend: 'llm-interface' });
+    const prev = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      const config = await mgr.discoverProviders();
+      // openai has catalog models but no vendor key -> stays disabled
+      expect(config.openai.model_source).toBe('openrouter');
+      expect(config.openai.enabled).toBe(false);
+    } finally {
+      if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+    }
+  });
+
   test('falls back to static config when OpenRouter fetch fails', async () => {
     const fakeSync = { buildProviderCatalog: jest.fn().mockRejectedValue(new Error('network down')) };
     const { mgr, tmpFile } = tempConfigManager({ openRouterSync: fakeSync });

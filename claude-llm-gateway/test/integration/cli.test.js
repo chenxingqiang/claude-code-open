@@ -8,10 +8,15 @@ const { execFileSync, execFile } = require('child_process');
 const { promisify } = require('util');
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 const execFileAsync = promisify(execFile);
 const CLI = path.join(__dirname, '..', '..', 'bin', 'cli.js');
-const ENV = { ...process.env, ENABLE_OPENROUTER_SYNC: 'false' };
+// Isolate the generated catalog to a temp file so the CLI tests never write the
+// real config/providers.json.
+const TMP_CONFIG = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'clicfg-')), 'providers.json');
+const ENV = { ...process.env, ENABLE_OPENROUTER_SYNC: 'false', PROVIDERS_CONFIG_PATH: TMP_CONFIG };
 
 function runCli(args) {
   return execFileSync('node', [CLI, ...args], {

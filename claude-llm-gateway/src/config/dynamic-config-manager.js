@@ -9,9 +9,13 @@ const OpenRouterModelSync = require('../openrouter-model-sync');
 
 class DynamicConfigManager {
     constructor(options = {}) {
-        this.configPath = path.join(__dirname, '../../config/providers.json');
+        this.configPath = options.configPath || process.env.PROVIDERS_CONFIG_PATH || path.join(__dirname, '../../config/providers.json');
         this.providersInfo = new Map();
         this.lastUpdate = null;
+        // Call backend that determines how providers become usable. Under the
+        // dynamic 'openrouter' backend, any provider present in the OpenRouter
+        // catalog is usable with just OPENROUTER_API_KEY (no per-vendor keys).
+        this.callBackend = (options.callBackend || process.env.CALL_BACKEND || 'openrouter').toLowerCase();
         // Automatic model-info sync from OpenRouter (enabled by default; opt out
         // by setting ENABLE_OPENROUTER_SYNC=false).
         this.openRouterSyncEnabled = options.openRouterSyncEnabled != null
@@ -110,8 +114,15 @@ class DynamicConfigManager {
 
                     // Overlay live OpenRouter data when available for this provider.
                     this.applyCatalogToProvider(providerConfig[providerName], providerName, catalog);
+
+                    // Under the dynamic OpenRouter backend, a provider that exists
+                    // in the catalog is callable via OpenRouter regardless of any
+                    // per-vendor API key, so mark it enabled.
+                    if (this.callBackend === 'openrouter' && providerConfig[providerName].model_source === 'openrouter') {
+                        providerConfig[providerName].enabled = true;
+                    }
                     
-                    console.log(`✅ Discovery provider: ${providerName} (${providerConfig[providerName].models?.length || 0} models, source=${providerConfig[providerName].model_source})`);
+                    console.log(`✅ Discovery provider: ${providerName} (${providerConfig[providerName].models?.length || 0} models, source=${providerConfig[providerName].model_source}, enabled=${providerConfig[providerName].enabled})`);
                 } catch (error) {
                     console.warn(`⚠️ Skipping provider ${providerName}: ${error.message}`);
                 }

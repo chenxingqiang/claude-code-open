@@ -12,6 +12,7 @@ const DynamicConfigManager = require('./config/dynamic-config-manager');
 const ClaudeCompatibility = require('./claude-compatibility');
 const ProviderRouter = require('./provider-router');
 const IntelligentModelSelector = require('./intelligent-model-selector');
+const OpenRouterClient = require('./openrouter-client');
 
 class ClaudeLLMGateway {
   constructor() {
@@ -20,6 +21,11 @@ class ClaudeLLMGateway {
     this.claudeCompat = new ClaudeCompatibility();
     this.providerRouter = new ProviderRouter();
     this.modelSelector = new IntelligentModelSelector();
+    // Dynamic call layer: send completions through OpenRouter's unified
+    // endpoint using the synced model id, instead of statically injecting
+    // per-vendor keys into llm-interface. Switch back with CALL_BACKEND.
+    this.openRouterClient = new OpenRouterClient();
+    this.callBackend = (process.env.CALL_BACKEND || 'openrouter').toLowerCase();
     this.providers = new Map();
     this.requestLog = new Map();
   }
@@ -72,9 +78,17 @@ class ClaudeLLMGateway {
         throw new Error('Unable to load provider configuration');
       }
       
-      // Set API keys
-      const apiKeys = this.extractApiKeys(config.providers);
-      LLMInterface.setApiKey(apiKeys);
+      // Only statically inject per-vendor keys into llm-interface when that is
+      // the selected call backend. The dynamic OpenRouter backend needs none.
+      if (this.callBackend === 'llm-interface') {
+        const apiKeys = this.extractApiKeys(config.providers);
+        LLMInterface.setApiKey(apiKeys);
+      }
+
+      // Tell the router which call backend drives health semantics.
+      if (typeof this.providerRouter.setCallBackend === 'function') {
+        this.providerRouter.setCallBackend(this.callBackend, this.openRouterClient);
+      }
       
       // Initialize provider router
       await this.providerRouter.initialize(config.providers);
@@ -385,8 +399,8 @@ class ClaudeLLMGateway {
         response = await this.handleStreamRequest(llmRequest, provider, res, requestId);
         return; // Streaming response returns directly
       } else {
-        // Handle normal response
-        response = await LLMInterface.sendMessage(provider, llmRequest);
+        // Handle normal response via the configured call backend
+        response = await this.dispatchCompletion(provider, llmRequest);
       }
       
       const processingTime = Date.now() - startTime;
@@ -407,6 +421,31 @@ class ClaudeLLMGateway {
   }
 
   /**
+   * Dispatch a (non-streaming) completion through the configured call backend.
+   * - openrouter: send to OpenRouter's unified endpoint using the model id.
+   * - llm-interface: legacy per-vendor dispatch with statically injected keys.
+   * @param {string} provider Selected provider (used by the llm-interface backend).
+   * @param {object} llmRequest Transformed request (model, messages, params).
+   * @returns {Promise<object>} OpenAI-compatible response.
+   */
+  async dispatchCompletion(provider, llmRequest) {
+    if (this.callBackend === 'openrouter') {
+      if (!this.openRouterClient.isConfigured()) {
+        throw new Error('OPENROUTER_API_KEY not configured (set it, or switch CALL_BACKEND=llm-interface)');
+      }
+      return this.openRouterClient.chatCompletion({
+        model: llmRequest.model,
+        messages: llmRequest.messages,
+        max_tokens: llmRequest.max_tokens,
+        temperature: llmRequest.temperature,
+        top_p: llmRequest.top_p,
+        stop: llmRequest.stop
+      });
+    }
+    return LLMInterface.sendMessage(provider, llmRequest);
+  }
+
+  /**
    * Handle streaming requests
    */
   async handleStreamRequest(llmRequest, provider, res, requestId) {
@@ -418,16 +457,36 @@ class ClaudeLLMGateway {
       // Send start event
       res.write(`data: {"type": "message_start", "message": {"id": "${requestId}"}}\n\n`);
       
-      // Use llm-interface streaming functionality
-      const stream = await LLMInterface.sendMessage(provider, {
-        ...llmRequest,
-        stream: true
-      });
-      
-      // Handle streaming response
-      for await (const chunk of stream) {
-        const claudeChunk = this.claudeCompat.convertStreamResponse(chunk, provider);
-        res.write(claudeChunk);
+      if (this.callBackend === 'openrouter') {
+        if (!this.openRouterClient.isConfigured()) {
+          throw new Error('OPENROUTER_API_KEY not configured (set it, or switch CALL_BACKEND=llm-interface)');
+        }
+        // Stream text deltas from OpenRouter and re-emit as Claude deltas.
+        for await (const delta of this.openRouterClient.streamCompletion({
+          model: llmRequest.model,
+          messages: llmRequest.messages,
+          max_tokens: llmRequest.max_tokens,
+          temperature: llmRequest.temperature,
+          top_p: llmRequest.top_p,
+          stop: llmRequest.stop
+        })) {
+          const claudeChunk = {
+            type: 'content_block_delta',
+            index: 0,
+            delta: { type: 'text_delta', text: delta }
+          };
+          res.write(`data: ${JSON.stringify(claudeChunk)}\n\n`);
+        }
+      } else {
+        // Legacy llm-interface streaming
+        const stream = await LLMInterface.sendMessage(provider, {
+          ...llmRequest,
+          stream: true
+        });
+        for await (const chunk of stream) {
+          const claudeChunk = this.claudeCompat.convertStreamResponse(chunk, provider);
+          res.write(claudeChunk);
+        }
       }
       
       // Send end event
