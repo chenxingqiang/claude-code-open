@@ -15,6 +15,43 @@ class IntelligentModelSelector {
     }
 
     /**
+     * Merge live pricing from an OpenRouter catalog into modelPricing so cost
+     * estimation stays current without manual edits. Purely additive: existing
+     * hardcoded entries are only overwritten for keys present in the catalog.
+     * @param {Array<object>} normalizedModels Models from OpenRouterModelSync.buildProviderCatalog().models
+     * @returns {number} number of pricing entries added or updated.
+     */
+    applyOpenRouterPricing(normalizedModels) {
+        if (!Array.isArray(normalizedModels)) {
+            return 0;
+        }
+        let updated = 0;
+        for (const model of normalizedModels) {
+            if (!model || !model.pricing) {
+                continue;
+            }
+            const prompt = parseFloat(model.pricing.prompt);
+            const completion = parseFloat(model.pricing.completion);
+            if (!Number.isFinite(prompt) && !Number.isFinite(completion)) {
+                continue;
+            }
+            // OpenRouter prices are per token; modelPricing uses USD per 1M tokens.
+            const entry = {
+                input: Number.isFinite(prompt) ? Math.round(prompt * 1e6 * 1e4) / 1e4 : 0,
+                output: Number.isFinite(completion) ? Math.round(completion * 1e6 * 1e4) / 1e4 : 0
+            };
+            // Key by full id, canonical slug and short slug so lookups by any of
+            // these forms resolve to live pricing.
+            const keys = new Set([model.id, model.canonical_slug, model.short_slug].filter(Boolean));
+            for (const key of keys) {
+                this.modelPricing[key] = entry;
+                updated += 1;
+            }
+        }
+        return updated;
+    }
+
+    /**
      * Initialize task detection patterns
      * Enhanced with: math, agentic, vision, audio, reasoning task types
      */

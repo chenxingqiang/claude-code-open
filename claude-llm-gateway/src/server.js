@@ -88,6 +88,9 @@ class ClaudeLLMGateway {
       }
       
       console.log(`✅ Successfully configured ${this.providers.size} providers`);
+
+      // Keep the intelligent selector's pricing in sync with live model data.
+      this.syncModelSelectorPricing(config);
       
       // Show configuration summary
       this.displayProviderSummary(config.providers);
@@ -96,6 +99,61 @@ class ClaudeLLMGateway {
       console.error('❌ Dynamic provider configuration failed:', error);
       throw error;
     }
+  }
+
+  /**
+   * Feed live OpenRouter model pricing (stored as per-provider model_details in
+   * the loaded config) into the intelligent model selector so cost estimation
+   * reflects current prices. Safe no-op when no OpenRouter data is present.
+   * @param {object} config Loaded providers config file.
+   */
+  syncModelSelectorPricing(config) {
+    try {
+      if (!config || !config.providers) {
+        return;
+      }
+      const allDetails = [];
+      for (const provider of Object.values(config.providers)) {
+        if (provider && Array.isArray(provider.model_details)) {
+          allDetails.push(...provider.model_details);
+        }
+      }
+      if (allDetails.length > 0 && typeof this.modelSelector.applyOpenRouterPricing === 'function') {
+        const updated = this.modelSelector.applyOpenRouterPricing(allDetails);
+        console.log(`💲 Synced pricing for ${updated} model keys from live catalog`);
+      }
+    } catch (error) {
+      console.warn(`⚠️  Failed to sync model selector pricing: ${error.message}`);
+    }
+  }
+
+  /**
+   * Start a periodic background refresh of provider/model info so the catalog
+   * stays current without manual intervention. Interval defaults to the config
+   * TTL; override with MODEL_SYNC_INTERVAL_MINUTES. The timer is unref'd so it
+   * never keeps the process alive on its own.
+   */
+  startModelSyncScheduler() {
+    const minutes = parseInt(process.env.MODEL_SYNC_INTERVAL_MINUTES, 10)
+      || (this.configManager.configTtlHours * 60);
+    const intervalMs = Math.max(1, minutes) * 60 * 1000;
+    if (this._modelSyncTimer) {
+      clearInterval(this._modelSyncTimer);
+    }
+    this._modelSyncTimer = setInterval(async () => {
+      try {
+        console.log('⏱️  Scheduled model-info refresh starting...');
+        await this.configManager.discoverProviders();
+        await this.setupDynamicProviders();
+        console.log('✅ Scheduled model-info refresh completed');
+      } catch (error) {
+        console.warn(`⚠️  Scheduled model-info refresh failed: ${error.message}`);
+      }
+    }, intervalMs);
+    if (typeof this._modelSyncTimer.unref === 'function') {
+      this._modelSyncTimer.unref();
+    }
+    console.log(`🗓️  Model-info auto-refresh scheduled every ${minutes} minute(s)`);
   }
 
   /**
@@ -236,6 +294,8 @@ class ClaudeLLMGateway {
     this.app.get('/providers', this.handleProviders.bind(this));
     this.app.get('/providers/refresh', this.handleRefreshProviders.bind(this));
     this.app.get('/models', this.handleModels.bind(this));
+    this.app.get('/models/catalog', this.handleModelCatalog.bind(this));
+    this.app.get('/models/sync-status', this.handleModelSyncStatus.bind(this));
     this.app.get('/config', this.handleConfig.bind(this));
     this.app.get('/stats', this.handleStats.bind(this));
     
@@ -456,7 +516,10 @@ class ClaudeLLMGateway {
         success: true,
         message: 'Provider configuration refreshed',
         timestamp: new Date().toISOString(),
-        total_providers: this.providers.size
+        total_providers: this.providers.size,
+        model_sync: typeof this.configManager.getLastSyncInfo === 'function'
+          ? this.configManager.getLastSyncInfo()
+          : null
       });
     } catch (error) {
       res.status(500).json({
@@ -487,6 +550,75 @@ class ClaudeLLMGateway {
       res.json({
         object: 'list',
         data: models
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Handle live model catalog requests. Returns the automatically synced model
+   * information (from OpenRouter) grouped by provider, plus a flat model list.
+   * Optional query: ?provider=openai to filter, ?flat=true to only return models.
+   */
+  async handleModelCatalog(req, res) {
+    try {
+      const config = await this.configManager.loadConfig();
+      const providersOut = {};
+      const flatModels = [];
+      const filter = req.query.provider;
+
+      if (config && config.providers) {
+        for (const [name, entry] of Object.entries(config.providers)) {
+          if (filter && name !== filter) {
+            continue;
+          }
+          const details = Array.isArray(entry.model_details) ? entry.model_details : [];
+          providersOut[name] = {
+            model_source: entry.model_source || 'static',
+            model_count: (entry.models || []).length,
+            cost_per_1k_tokens: entry.cost_per_1k_tokens,
+            capabilities: entry.capabilities || {},
+            models: entry.models || [],
+            model_details: details
+          };
+          flatModels.push(...details);
+        }
+      }
+
+      res.json({
+        source: config ? (config.model_source || 'static') : 'static',
+        synced_at: config ? (config.openrouter_synced_at || null) : null,
+        total_models: flatModels.length,
+        providers: req.query.flat === 'true' ? undefined : providersOut,
+        models: flatModels
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Handle model sync status requests. Reports where model information came from
+   * (OpenRouter vs static), when it was last synced, and how many models exist.
+   */
+  async handleModelSyncStatus(req, res) {
+    try {
+      const config = await this.configManager.loadConfig();
+      const lastSync = typeof this.configManager.getLastSyncInfo === 'function'
+        ? this.configManager.getLastSyncInfo()
+        : null;
+      res.json({
+        openrouter_sync_enabled: this.configManager.openRouterSyncEnabled !== false,
+        last_sync: lastSync,
+        config: config ? {
+          model_source: config.model_source || 'static',
+          openrouter_synced_at: config.openrouter_synced_at || null,
+          openrouter_total_models: config.openrouter_total_models || 0,
+          generated_at: config.generated_at || null,
+          total_providers: config.total_providers || 0
+        } : null,
+        ttl_hours: this.configManager.configTtlHours
       });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -631,6 +763,9 @@ class ClaudeLLMGateway {
    */
   async start(port = null) {
     await this.initialize();
+
+    // Keep model information fresh automatically in the background.
+    this.startModelSyncScheduler();
     
     const serverPort = port || process.env.GATEWAY_PORT || 8765;
     const serverHost = process.env.GATEWAY_HOST || 'localhost';
