@@ -1,0 +1,15 @@
+{
+  "name": "Claude LLM Gateway",
+  "install": "cd claude-llm-gateway && npm ci",
+  "terminals": [
+    {
+      "name": "gateway-api",
+      "command": "cd claude-llm-gateway && GATEWAY_HOST=0.0.0.0 GATEWAY_PORT=8765 npm start"
+    },
+    {
+      "name": "web-ui",
+      "command": "cd claude-llm-gateway && WEB_PORT=9000 npm run web"
+    }
+  ],
+  "ports": [8765, 9000]
+}
