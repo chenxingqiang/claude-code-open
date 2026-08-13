@@ -353,7 +353,15 @@ program
       if (options.update) {
         console.log(chalk.blue('🔄 Updating provider configuration...'));
         await configManager.discoverProviders();
-        console.log(chalk.green('✅ Configuration updated successfully'));
+        const info = configManager.getLastSyncInfo();
+        if (info && info.ok) {
+          console.log(chalk.green(`✅ Configuration updated from OpenRouter (${info.total_models} models)`));
+        } else {
+          console.log(chalk.green('✅ Configuration updated (static fallback)'));
+          if (info && info.error) {
+            console.log(chalk.gray(`   OpenRouter sync skipped/failed: ${info.error}`));
+          }
+        }
       }
 
       if (options.show) {
@@ -368,12 +376,105 @@ program
 
       if (options.reset) {
         console.log(chalk.yellow('🔄 Resetting configuration...'));
-        // Implementation would remove config file and regenerate
-        console.log(chalk.green('✅ Configuration reset'));
+        // The catalog is an auto-generated cache; removing it forces a fresh
+        // discovery (OpenRouter sync or static fallback) on the next run.
+        if (fs.existsSync(configManager.configPath)) {
+          fs.unlinkSync(configManager.configPath);
+          console.log(chalk.gray(`   Removed ${configManager.configPath}`));
+        }
+        await configManager.discoverProviders();
+        console.log(chalk.green('✅ Configuration reset and regenerated'));
       }
 
     } catch (error) {
       console.error(chalk.red('❌ Configuration operation failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Models command — inspect and refresh the auto-synced model catalog
+program
+  .command('models [action]')
+  .description('Manage the auto-synced model catalog: status | sync | list')
+  .option('-p, --provider <provider>', 'Filter to a single provider (for list)')
+  .option('-l, --limit <n>', 'Max models to show per provider (for list)', '10')
+  .action(async (action, options) => {
+    const act = (action || 'status').toLowerCase();
+    try {
+      const configManager = new DynamicConfigManager();
+
+      if (act === 'sync') {
+        console.log(chalk.blue('🌐 Syncing model information...'));
+        await configManager.discoverProviders();
+        const info = configManager.getLastSyncInfo();
+        if (info && info.ok) {
+          console.log(chalk.green(`✅ Synced ${info.total_models} models from OpenRouter`));
+          console.log(chalk.gray(`   Synced at: ${info.synced_at}`));
+        } else {
+          console.log(chalk.yellow('⚠️ OpenRouter sync unavailable, used static fallback'));
+          if (info && info.error) {
+            console.log(chalk.gray(`   Reason: ${info.error}`));
+          }
+        }
+        return;
+      }
+
+      if (act === 'status') {
+        const config = await configManager.loadConfig();
+        if (!config) {
+          console.log(chalk.yellow('⚠️ No catalog yet. Run "claude-llm-gateway models sync".'));
+          return;
+        }
+        const providers = config.providers || {};
+        const bySource = { openrouter: 0, static: 0 };
+        let totalModels = 0;
+        for (const p of Object.values(providers)) {
+          const src = p.model_source === 'openrouter' ? 'openrouter' : 'static';
+          bySource[src] += 1;
+          totalModels += (p.models || []).length;
+        }
+        console.log(chalk.blue('\n📊 === Model Catalog Status ==='));
+        console.log(`  Source:            ${chalk.cyan(config.model_source || 'static')}`);
+        console.log(`  OpenRouter synced: ${config.openrouter_synced_at || 'never'}`);
+        console.log(`  OpenRouter models: ${config.openrouter_total_models || 0}`);
+        console.log(`  Providers:         ${Object.keys(providers).length} (openrouter=${bySource.openrouter}, static=${bySource.static})`);
+        console.log(`  Total models:      ${totalModels}`);
+        console.log(`  Generated at:      ${config.generated_at || 'unknown'}`);
+        console.log('');
+        return;
+      }
+
+      if (act === 'list') {
+        const config = await configManager.loadConfig();
+        if (!config || !config.providers) {
+          console.log(chalk.yellow('⚠️ No catalog yet. Run "claude-llm-gateway models sync".'));
+          return;
+        }
+        const limit = parseInt(options.limit, 10) || 10;
+        const entries = Object.entries(config.providers)
+          .filter(([name]) => !options.provider || name === options.provider);
+        if (entries.length === 0) {
+          console.log(chalk.yellow(`⚠️ No provider matched "${options.provider}"`));
+          return;
+        }
+        console.log(chalk.blue('\n📚 === Model Catalog ==='));
+        for (const [name, entry] of entries) {
+          const models = entry.models || [];
+          const tag = entry.model_source === 'openrouter' ? chalk.green('[openrouter]') : chalk.gray('[static]');
+          console.log(`\n${chalk.bold(name)} ${tag} — ${models.length} models`);
+          models.slice(0, limit).forEach(m => console.log(`  ${chalk.cyan('•')} ${m}`));
+          if (models.length > limit) {
+            console.log(chalk.gray(`  ... and ${models.length - limit} more`));
+          }
+        }
+        console.log('');
+        return;
+      }
+
+      console.log(chalk.red(`❌ Unknown action "${act}". Use: status | sync | list`));
+      process.exit(1);
+    } catch (error) {
+      console.error(chalk.red('❌ Models operation failed:'), error.message);
       process.exit(1);
     }
   });
