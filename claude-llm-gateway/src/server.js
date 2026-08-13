@@ -254,8 +254,9 @@ class ClaudeLLMGateway {
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true }));
     
-    // Serve static files for web UI
-    this.app.use(express.static(path.join(__dirname, '..', 'public')));
+    // Serve static files for web UI. index:false so "/" is handled by
+    // handleRoot (which content-negotiates between the dashboard and JSON info).
+    this.app.use(express.static(path.join(__dirname, '..', 'public'), { index: false }));
 
     // Rate limiting
     const limiter = rateLimit({
@@ -653,31 +654,31 @@ class ClaudeLLMGateway {
    * Handle root path requests
    */
   handleRoot(req, res) {
-    // Check Accept header to determine response type
+    // Serve the HTML dashboard only to browsers (which send Accept: text/html).
+    // API clients and tests (no explicit html preference) get JSON gateway info.
     const acceptHeader = req.get('Accept') || '';
-    
-    // If client explicitly requests JSON or is an API client
-    if (acceptHeader.includes('application/json') && !acceptHeader.includes('text/html')) {
-      return res.json({
-        name: 'Claude LLM Gateway',
-        version: require('../package.json').version,
-        description: 'Multi-LLM API Gateway for Claude Code using llm-interface',
-        endpoints: {
-          messages: '/v1/messages',
-          chat: '/v1/chat/completions',
-          health: '/health',
-          providers: '/providers',
-          models: '/models',
-          stats: '/stats'
-        },
-        providers: Array.from(this.providers.keys()),
-        documentation: 'https://github.com/claude-llm-gateway'
-      });
+    if (acceptHeader.includes('text/html')) {
+      const indexPath = path.join(__dirname, '..', 'public', 'index.html');
+      return res.sendFile(indexPath);
     }
-    
-    // For browser requests, serve the HTML dashboard
-    const indexPath = path.join(__dirname, '..', 'public', 'index.html');
-    res.sendFile(indexPath);
+
+    return res.json({
+      name: 'Claude LLM Gateway',
+      version: require('../package.json').version,
+      description: 'Multi-LLM API Gateway for Claude Code using llm-interface',
+      endpoints: {
+        messages: '/v1/messages',
+        chat: '/v1/chat/completions',
+        health: '/health',
+        providers: '/providers',
+        models: '/models',
+        models_catalog: '/models/catalog',
+        models_sync_status: '/models/sync-status',
+        stats: '/stats'
+      },
+      providers: Array.from(this.providers.keys()),
+      documentation: 'https://github.com/claude-llm-gateway'
+    });
   }
 
   /**

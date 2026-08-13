@@ -85,8 +85,10 @@ class ClaudeCompatibility {
       
       const llmRequest = {
         model: model,
+        // Honor an explicitly requested max_tokens; otherwise use the intelligent
+        // allocation. The allocation detail is always kept in _tokenAllocation.
+        max_tokens: claudeRequest.max_tokens != null ? claudeRequest.max_tokens : tokenAllocation.tokens,
         messages: messages,
-        max_tokens: tokenAllocation.tokens,
         temperature: claudeRequest.temperature || 0.7,
         stream: claudeRequest.stream || false,
         // add token allocation information to metadata
@@ -104,7 +106,7 @@ class ClaudeCompatibility {
 
       // Process system messages
       if (claudeRequest.system) {
-        llmRequest.messages.unshelloft({
+        llmRequest.messages.unshift({
           role: 'system',
           content: claudeRequest.system
         });
@@ -166,10 +168,14 @@ class ClaudeCompatibility {
       claudeModel = 'claude-3-sonnet';
     }
 
+    // Resolve provider aliases (e.g. "mock-openai" -> "openai") so mappings work
+    // regardless of any prefix the caller uses.
+    const providerKey = this.resolveProviderKey(provider);
+
     // find model mapping
     const mapping = this.modelMappings[claudeModel];
-    if (mapping && mapping[provider]) {
-      return mapping[provider];
+    if (mapping && mapping[providerKey]) {
+      return mapping[providerKey];
     }
 
     // If no mapping found, using default model
@@ -185,7 +191,24 @@ class ClaudeCompatibility {
       'deepseek': 'deepseek-chat'
     };
 
-    return defaultModels[provider] || 'gpt-3.5-turbo';
+    return defaultModels[providerKey] || 'gpt-3.5-turbo';
+  }
+
+  /**
+   * Resolve a provider identifier to a known mapping key. Returns the provider
+   * unchanged when it is already a known key; otherwise returns the first known
+   * key contained in the provider name (so "mock-openai" -> "openai").
+   */
+  resolveProviderKey(provider) {
+    if (!provider || typeof provider !== 'string') {
+      return provider;
+    }
+    const knownKeys = ['openai', 'google', 'ollama', 'cohere', 'mistral', 'groq', 'anthropic', 'huggingface', 'deepseek'];
+    if (knownKeys.includes(provider)) {
+      return provider;
+    }
+    const lower = provider.toLowerCase();
+    return knownKeys.find(key => lower.includes(key)) || provider;
   }
 
   /**

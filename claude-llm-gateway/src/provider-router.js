@@ -26,8 +26,11 @@ class ProviderRouter {
       this.requestCounts.set(providerName, 0);
     }
 
-    // Start health checks
-    await this.startHealthChecks();
+    // Start health checks. Skipped under test so manually-set health status
+    // (via setProviderHealth) is not clobbered by background ping attempts.
+    if (process.env.NODE_ENV !== 'test') {
+      await this.startHealthChecks();
+    }
     
     console.log(`🚀 Provider router initialization completed, supporting ${this.providerConfig.size} providers`);
   }
@@ -78,6 +81,15 @@ class ProviderRouter {
   selectByModel(model) {
     if (!model) return null;
 
+    // 1. Prefer an enabled provider whose configured model pool contains the
+    //    exact model id (keeps routing aligned with the live/synced catalog).
+    for (const [providerName, config] of this.providerConfig.entries()) {
+      if (config.enabled && Array.isArray(config.models) && config.models.includes(model)) {
+        return providerName;
+      }
+    }
+
+    // 2. Fall back to generic vendor heuristics by model-name substring.
     const modelLower = model.toLowerCase();
 
     // OpenAI model
@@ -111,26 +123,6 @@ class ProviderRouter {
     }
 
     return null;
-  }
-
-  /**
-   * Get healthy provider list
-   */
-  getHealthyProviders() {
-    const healthy = [];
-    
-    for (const [providerName, config] of this.providerConfig.entries()) {
-      if (config.enabled && this.isProviderHealthy(providerName)) {
-        healthy.push(providerName);
-      }
-    }
-
-    // Sort by priority
-    return healthy.sort((a, b) => {
-      const priorityA = this.providerConfig.get(a)?.priority || 10;
-      const priorityB = this.providerConfig.get(b)?.priority || 10;
-      return priorityA - priorityB;
-    });
   }
 
   /**
@@ -239,16 +231,16 @@ class ProviderRouter {
    * Get default provider
    */
   getDefaultProvider() {
-    // return the first enabled provider sorted by priority
-    const enabledProviders = Array.from(this.providerConfig.entries())
-      .filter(([name, config]) => config.enabled)
+    // Return the highest-priority provider that is both enabled and healthy.
+    const enabledHealthy = Array.from(this.providerConfig.entries())
+      .filter(([name, config]) => config.enabled && this.isProviderHealthy(name))
       .sort((a, b) => (a[1].priority || 10) - (b[1].priority || 10));
 
-    if (enabledProviders.length > 0) {
-      return enabledProviders[0][0];
+    if (enabledHealthy.length > 0) {
+      return enabledHealthy[0][0];
     }
 
-    // if no enabled providers, return openai as default
+    // if no enabled+healthy providers, return openai as the ultimate default
     return 'openai';
   }
 

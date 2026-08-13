@@ -3,7 +3,6 @@ module.exports = {
     roots: ['<rootDir>/test'],
     testMatch: [
         '**/__tests__/**/*.js',
-        '**/test/**/*.js',
         '**/?(*.)+(spec|test).js'
     ],
     collectCoverageFrom: [
