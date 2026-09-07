@@ -87,7 +87,7 @@ class ClaudeCompatibility {
         model: model,
         // Honor an explicitly requested max_tokens; otherwise use the intelligent
         // allocation. The allocation detail is always kept in _tokenAllocation.
-        max_tokens: claudeRequest.max_tokens != null ? claudeRequest.max_tokens : tokenAllocation.tokens,
+        max_tokens: Number.isInteger(claudeRequest.max_tokens) && claudeRequest.max_tokens > 0 ? claudeRequest.max_tokens : tokenAllocation.tokens,
         messages: messages,
         temperature: claudeRequest.temperature || 0.7,
         stream: claudeRequest.stream || false,
