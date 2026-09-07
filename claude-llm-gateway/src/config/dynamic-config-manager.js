@@ -1,17 +1,74 @@
-const {
-    LLMInterface
-} = require('llm-interface');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
+const OpenRouterModelSync = require('../openrouter-model-sync');
 
 class DynamicConfigManager {
-    constructor() {
-        this.configPath = path.join(__dirname, '../../config/providers.json');
+    constructor(options = {}) {
+        this.configPath = options.configPath || process.env.PROVIDERS_CONFIG_PATH || path.join(__dirname, '../../config/providers.json');
         this.providersInfo = new Map();
         this.lastUpdate = null;
+        // Call backend that determines how providers become usable. Under the
+        // dynamic 'openrouter' backend, any provider present in the OpenRouter
+        // catalog is usable with just OPENROUTER_API_KEY (no per-vendor keys).
+        this.callBackend = (options.callBackend || process.env.CALL_BACKEND || 'openrouter').toLowerCase();
+        // Automatic model-info sync from OpenRouter (enabled by default; opt out
+        // by setting ENABLE_OPENROUTER_SYNC=false).
+        this.openRouterSyncEnabled = options.openRouterSyncEnabled != null
+            ? options.openRouterSyncEnabled
+            : (process.env.ENABLE_OPENROUTER_SYNC || 'true').toLowerCase() !== 'false';
+        this.openRouterSync = options.openRouterSync || new OpenRouterModelSync();
+        // Cache of the most recent OpenRouter sync outcome for status reporting.
+        this.lastSyncInfo = { source: 'static', synced_at: null, total_models: 0, ok: false };
+        // Config freshness window (hours) before an automatic refresh is due.
+        this.configTtlHours = options.configTtlHours
+            || parseInt(process.env.MODEL_SYNC_TTL_HOURS, 10)
+            || 24;
     } 
+
+    /**
+     * Best-effort fetch of the live OpenRouter model catalog. Never throws:
+     * on failure it records the error and returns null so callers can fall back
+     * to static provider defaults.
+     * @returns {Promise<object|null>} catalog from OpenRouterModelSync, or null.
+     */
+    async fetchOpenRouterCatalog() {
+        if (!this.openRouterSyncEnabled) {
+            return null;
+        }
+        try {
+            const catalog = await this.openRouterSync.buildProviderCatalog();
+            this.lastSyncInfo = {
+                source: 'openrouter',
+                synced_at: catalog.fetched_at,
+                total_models: catalog.total_models,
+                from_cache: !!catalog.from_cache,
+                ok: true
+            };
+            const via = catalog.from_cache ? ' (from cache)' : '';
+            console.log(`🌐 OpenRouter sync: ${catalog.total_models} models across ${Object.keys(catalog.providers).length} providers${via}`);
+            return catalog;
+        } catch (error) {
+            this.lastSyncInfo = {
+                source: 'static',
+                synced_at: new Date().toISOString(),
+                total_models: 0,
+                ok: false,
+                error: error.message
+            };
+            console.warn(`⚠️ OpenRouter sync failed, falling back to static model info: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Return information about the most recent model-info sync.
+     * @returns {{source: string, synced_at: string|null, total_models: number, ok: boolean, error?: string}}
+     */
+    getLastSyncInfo() {
+        return this.lastSyncInfo;
+    }
 
     /** 
      * 从llm-interface包动态获取所有支持的provider information 
@@ -19,6 +76,11 @@ class DynamicConfigManager {
     async discoverProviders() {
         try {
             console.log('🔍 Discovering providers from llm-interface package...');
+            // Pull the live OpenRouter model catalog once (best-effort). When it
+            // succeeds it becomes the source of truth for model lists, pricing and
+            // capabilities; otherwise we transparently fall back to static defaults.
+            const catalog = await this.fetchOpenRouterCatalog();
+
             // 获取llm-interface支持的所有provider 
             const providers = this.getAvailableProviders();
             const providerConfig = {};
@@ -28,7 +90,7 @@ class DynamicConfigManager {
                     // Try to get detailed information for each provider 
                     const providerInfo = await this.getProviderInfo(providerName);
                     providerConfig[providerName] = {
-                        enabled: this.isProviderConfigured(providerName), 
+                        enabled: await this.isProviderConfigured(providerName), 
                         priority: this.calculatePriority(providerName), 
                         models: providerInfo.models || [], 
                         capabilities: providerInfo.capabilities || {}, 
@@ -37,6 +99,7 @@ class DynamicConfigManager {
                         requires_api_key: providerInfo.requires_api_key !== false, 
                         local: providerInfo.local || false, 
                         streaming_support: providerInfo.streaming_support !== false, 
+                        model_source: 'static',
                         last_updated: new Date().toISOString()
                     };
                     
@@ -45,8 +108,18 @@ class DynamicConfigManager {
                         const staticDefaults = this.getStaticProviderDetails(providerName);
                         providerConfig[providerName].models = staticDefaults.default_models || ['default-model'];
                     } 
+
+                    // Overlay live OpenRouter data when available for this provider.
+                    this.applyCatalogToProvider(providerConfig[providerName], providerName, catalog);
+
+                    // Under the dynamic OpenRouter backend, a provider that exists
+                    // in the catalog is callable via OpenRouter regardless of any
+                    // per-vendor API key, so mark it enabled.
+                    if (this.callBackend === 'openrouter' && providerConfig[providerName].model_source === 'openrouter') {
+                        providerConfig[providerName].enabled = true;
+                    }
                     
-                    console.log(`✅ Discovery provider: ${providerName} (${providerConfig[providerName].models?.length || 0} models)`);
+                    console.log(`✅ Discovery provider: ${providerName} (${providerConfig[providerName].models?.length || 0} models, source=${providerConfig[providerName].model_source}, enabled=${providerConfig[providerName].enabled})`);
                 } catch (error) {
                     console.warn(`⚠️ Skipping provider ${providerName}: ${error.message}`);
                 }
@@ -61,6 +134,32 @@ class DynamicConfigManager {
             throw error;
         }
     } 
+
+    /**
+     * Merge live OpenRouter catalog data into a provider config entry in place.
+     * Only overrides model-derived fields (models, cost, capabilities, details)
+     * and preserves gateway-specific fields (enabled, priority, rate_limit, etc.).
+     * @param {object} entry Provider config entry to mutate.
+     * @param {string} providerName Gateway provider slug.
+     * @param {object|null} catalog Result of fetchOpenRouterCatalog().
+     */
+    applyCatalogToProvider(entry, providerName, catalog) {
+        if (!catalog || !catalog.providers || !catalog.providers[providerName]) {
+            return;
+        }
+        const info = catalog.providers[providerName];
+        if (Array.isArray(info.models) && info.models.length > 0) {
+            entry.models = info.models;
+            entry.model_details = info.model_details;
+            entry.model_source = 'openrouter';
+            entry.openrouter_synced_at = catalog.fetched_at;
+            if (Number.isFinite(info.cost_per_1k_tokens) && info.cost_per_1k_tokens > 0) {
+                entry.cost_per_1k_tokens = info.cost_per_1k_tokens;
+            }
+            // Merge capability flags (union with any static capabilities).
+            entry.capabilities = Object.assign({}, entry.capabilities, info.capabilities);
+        }
+    }
 
     /** 
      * 获取llm-interface包中所有可用的provider 
@@ -390,7 +489,7 @@ class DynamicConfigManager {
     /** 
      * 检查provider是否已配置（有API key等） 
      */
-    isProviderConfigured(providerName) {
+    async isProviderConfigured(providerName) {
         const envVars = {
             'openai': 'OPENAI_API_KEY', 
             'anthropic': 'ANTHROPIC_API_KEY', 
@@ -416,12 +515,12 @@ class DynamicConfigManager {
         
         if (providerName === 'ollama') {
             // For Ollama, check if local service is available 
-            return this.checkOllamaAvailability();
+            return await this.checkOllamaAvailability();
         } 
         
         if (providerName === 'llamacpp') {
             // For LLaMA.CPP, check if local service is available 
-            return this.checkLlamaCppAvailability();
+            return await this.checkLlamaCppAvailability();
         } 
         
         return !!process.env[envVar];
@@ -482,7 +581,9 @@ class DynamicConfigManager {
             
             const configData = {
                 generated_at: new Date().toISOString(), 
-                llm_interface_version: await this.getLLMInterfaceVersion(), 
+                model_source: this.lastSyncInfo && this.lastSyncInfo.ok ? 'openrouter' : 'static',
+                openrouter_synced_at: this.lastSyncInfo ? this.lastSyncInfo.synced_at : null,
+                openrouter_total_models: this.lastSyncInfo ? this.lastSyncInfo.total_models : 0,
                 total_providers: Object.keys(config).length, 
                 enabled_providers: Object.values(config).filter(p => p.enabled).length, 
                 providers: config
@@ -493,19 +594,6 @@ class DynamicConfigManager {
         } catch (error) {
             console.error('❌ Failed to save configuration:', error);
             throw error;
-        }
-    } 
-
-    /** 
-     * Get llm-interface package version 
-     */
-    async getLLMInterfaceVersion() {
-        try {
-            const packagePath = require.resolve('llm-interface/package.json');
-            const packageData = JSON.parse(await fs.readFile(packagePath, 'utf8'));
-            return packageData.version;
-        } catch (error) {
-            return 'unknown';
         }
     } 
 
@@ -531,7 +619,7 @@ class DynamicConfigManager {
         
         // Check if configuration is expired (e.g., over 24 hours) 
         const configAge = Date.now() - new Date(existingConfig.generated_at).getTime();
-        const maxAge = 24 * 60 * 60 * 1000; // 24hours 
+        const maxAge = this.configTtlHours * 60 * 60 * 1000;
         return configAge > maxAge;
     } 
 

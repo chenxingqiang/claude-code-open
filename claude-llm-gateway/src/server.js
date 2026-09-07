@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const { LLMInterface } = require('llm-interface');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -12,6 +11,7 @@ const DynamicConfigManager = require('./config/dynamic-config-manager');
 const ClaudeCompatibility = require('./claude-compatibility');
 const ProviderRouter = require('./provider-router');
 const IntelligentModelSelector = require('./intelligent-model-selector');
+const OpenRouterClient = require('./openrouter-client');
 
 class ClaudeLLMGateway {
   constructor() {
@@ -20,6 +20,10 @@ class ClaudeLLMGateway {
     this.claudeCompat = new ClaudeCompatibility();
     this.providerRouter = new ProviderRouter();
     this.modelSelector = new IntelligentModelSelector();
+    // Dynamic call layer: all completions go through OpenRouter's unified
+    // endpoint using the synced model id (single OPENROUTER_API_KEY). The old
+    // per-vendor llm-interface injection has been removed.
+    this.openRouterClient = new OpenRouterClient();
     this.providers = new Map();
     this.requestLog = new Map();
   }
@@ -72,9 +76,10 @@ class ClaudeLLMGateway {
         throw new Error('Unable to load provider configuration');
       }
       
-      // Set API keys
-      const apiKeys = this.extractApiKeys(config.providers);
-      LLMInterface.setApiKey(apiKeys);
+      // Provider health reflects the single OpenRouter dependency.
+      if (typeof this.providerRouter.setCallBackend === 'function') {
+        this.providerRouter.setCallBackend('openrouter', this.openRouterClient);
+      }
       
       // Initialize provider router
       await this.providerRouter.initialize(config.providers);
@@ -88,6 +93,9 @@ class ClaudeLLMGateway {
       }
       
       console.log(`✅ Successfully configured ${this.providers.size} providers`);
+
+      // Keep the intelligent selector's pricing in sync with live model data.
+      this.syncModelSelectorPricing(config);
       
       // Show configuration summary
       this.displayProviderSummary(config.providers);
@@ -99,52 +107,62 @@ class ClaudeLLMGateway {
   }
 
   /**
-   * Extract API keys
+   * Feed live OpenRouter model pricing (stored as per-provider model_details in
+   * the loaded config) into the intelligent model selector so cost estimation
+   * reflects current prices. Safe no-op when no OpenRouter data is present.
+   * @param {object} config Loaded providers config file.
    */
-  extractApiKeys(providers) {
-    const apiKeys = {};
-    
-    if (!providers || typeof providers !== 'object') {
-      console.warn('⚠️  No providers configuration found');
-      return apiKeys;
-    }
-    
-    for (const [name, config] of Object.entries(providers)) {
-      if (config.enabled && config.requires_api_key) {
-        const envVar = this.getApiKeyEnvVar(name);
-        if (process.env[envVar]) {
-          apiKeys[name] = process.env[envVar];
-        }
-      } else if (!config.requires_api_key) {
-        // For providers that don't require API keys (like Ollama)
-        apiKeys[name] = 'local';
+  syncModelSelectorPricing(config) {
+    try {
+      if (!config || !config.providers) {
+        return;
       }
+      const allDetails = [];
+      for (const provider of Object.values(config.providers)) {
+        if (provider && Array.isArray(provider.model_details)) {
+          allDetails.push(...provider.model_details);
+        }
+      }
+      if (allDetails.length > 0 && typeof this.modelSelector.applyOpenRouterPricing === 'function') {
+        const updated = this.modelSelector.applyOpenRouterPricing(allDetails);
+        console.log(`💲 Synced pricing for ${updated} model keys from live catalog`);
+      }
+      if (allDetails.length > 0 && typeof this.modelSelector.applyOpenRouterCapabilities === 'function') {
+        const caps = this.modelSelector.applyOpenRouterCapabilities(allDetails);
+        console.log(`🧩 Synced capabilities for ${caps} model keys from live catalog`);
+      }
+    } catch (error) {
+      console.warn(`⚠️  Failed to sync model selector pricing: ${error.message}`);
     }
-    
-    return apiKeys;
   }
 
   /**
-   * Get API key environment variable name
+   * Start a periodic background refresh of provider/model info so the catalog
+   * stays current without manual intervention. Interval defaults to the config
+   * TTL; override with MODEL_SYNC_INTERVAL_MINUTES. The timer is unref'd so it
+   * never keeps the process alive on its own.
    */
-  getApiKeyEnvVar(providerName) {
-    const envVars = {
-      'openai': 'OPENAI_API_KEY',
-      'anthropic': 'ANTHROPIC_API_KEY',
-      'google': 'GOOGLE_API_KEY',
-      'cohere': 'COHERE_API_KEY',
-      'huggingface': 'HUGGINGFACE_API_KEY',
-      'mistral': 'MISTRAL_API_KEY',
-      'groq': 'GROQ_API_KEY',
-      'perplexity': 'PERPLEXITY_API_KEY',
-      'ai21': 'AI21_API_KEY',
-      'nvidia': 'NVIDIA_API_KEY',
-      'fireworks': 'FIREWORKS_API_KEY',
-      'together': 'TOGETHER_API_KEY',
-      'replicate': 'REPLICATE_API_KEY'
-    };
-    
-    return envVars[providerName] || `${providerName.toUpperCase()}_API_KEY`;
+  startModelSyncScheduler() {
+    const minutes = parseInt(process.env.MODEL_SYNC_INTERVAL_MINUTES, 10)
+      || (this.configManager.configTtlHours * 60);
+    const intervalMs = Math.max(1, minutes) * 60 * 1000;
+    if (this._modelSyncTimer) {
+      clearInterval(this._modelSyncTimer);
+    }
+    this._modelSyncTimer = setInterval(async () => {
+      try {
+        console.log('⏱️  Scheduled model-info refresh starting...');
+        await this.configManager.discoverProviders();
+        await this.setupDynamicProviders();
+        console.log('✅ Scheduled model-info refresh completed');
+      } catch (error) {
+        console.warn(`⚠️  Scheduled model-info refresh failed: ${error.message}`);
+      }
+    }, intervalMs);
+    if (typeof this._modelSyncTimer.unref === 'function') {
+      this._modelSyncTimer.unref();
+    }
+    console.log(`🗓️  Model-info auto-refresh scheduled every ${minutes} minute(s)`);
   }
 
   /**
@@ -196,8 +214,9 @@ class ClaudeLLMGateway {
     this.app.use(express.json({ limit: '10mb' }));
     this.app.use(express.urlencoded({ extended: true }));
     
-    // Serve static files for web UI
-    this.app.use(express.static(path.join(__dirname, '..', 'public')));
+    // Serve static files for web UI. index:false so "/" is handled by
+    // handleRoot (which content-negotiates between the dashboard and JSON info).
+    this.app.use(express.static(path.join(__dirname, '..', 'public'), { index: false }));
 
     // Rate limiting
     const limiter = rateLimit({
@@ -236,6 +255,8 @@ class ClaudeLLMGateway {
     this.app.get('/providers', this.handleProviders.bind(this));
     this.app.get('/providers/refresh', this.handleRefreshProviders.bind(this));
     this.app.get('/models', this.handleModels.bind(this));
+    this.app.get('/models/catalog', this.handleModelCatalog.bind(this));
+    this.app.get('/models/sync-status', this.handleModelSyncStatus.bind(this));
     this.app.get('/config', this.handleConfig.bind(this));
     this.app.get('/stats', this.handleStats.bind(this));
     
@@ -300,6 +321,16 @@ class ClaudeLLMGateway {
       
       // Record request
       this.providerRouter.recordRequest(provider);
+
+      // Give reasoning models enough headroom so hidden reasoning tokens don't
+      // consume the whole budget and leave an empty answer.
+      if (typeof this.modelSelector.recommendMaxTokens === 'function' && req.body.max_tokens != null) {
+        const effMax = this.modelSelector.recommendMaxTokens(modelSelection.selectedModel, req.body.max_tokens);
+        if (effMax !== req.body.max_tokens) {
+          console.log(`🧵 Reasoning headroom: max_tokens ${req.body.max_tokens} -> ${effMax} for ${modelSelection.selectedModel} [${requestId}]`);
+          req.body.max_tokens = effMax;
+        }
+      }
       
       // Transform request format with selected model and intelligent token management
       const llmRequest = this.claudeCompat.toLLMInterface(
@@ -310,7 +341,7 @@ class ClaudeLLMGateway {
         modelSelection.complexity || 'medium'
       );
       
-      // Call llm-interface
+      // Dispatch via the dynamic OpenRouter call layer
       console.log(`🚀 Sending request to ${provider} [${requestId}]`);
       const startTime = Date.now();
       
@@ -320,8 +351,8 @@ class ClaudeLLMGateway {
         response = await this.handleStreamRequest(llmRequest, provider, res, requestId);
         return; // Streaming response returns directly
       } else {
-        // Handle normal response
-        response = await LLMInterface.sendMessage(provider, llmRequest);
+        // Handle normal response via the configured call backend
+        response = await this.dispatchCompletion(provider, llmRequest);
       }
       
       const processingTime = Date.now() - startTime;
@@ -342,6 +373,26 @@ class ClaudeLLMGateway {
   }
 
   /**
+   * Dispatch a (non-streaming) completion through the dynamic OpenRouter layer.
+   * @param {string} provider Selected provider (informational).
+   * @param {object} llmRequest Transformed request (model, messages, params).
+   * @returns {Promise<object>} OpenAI-compatible response.
+   */
+  async dispatchCompletion(provider, llmRequest) {
+    if (!this.openRouterClient.isConfigured()) {
+      throw new Error('OPENROUTER_API_KEY not configured');
+    }
+    return this.openRouterClient.chatCompletion({
+      model: llmRequest.model,
+      messages: llmRequest.messages,
+      max_tokens: llmRequest.max_tokens,
+      temperature: llmRequest.temperature,
+      top_p: llmRequest.top_p,
+      stop: llmRequest.stop
+    });
+  }
+
+  /**
    * Handle streaming requests
    */
   async handleStreamRequest(llmRequest, provider, res, requestId) {
@@ -352,17 +403,32 @@ class ClaudeLLMGateway {
       
       // Send start event
       res.write(`data: {"type": "message_start", "message": {"id": "${requestId}"}}\n\n`);
-      
-      // Use llm-interface streaming functionality
-      const stream = await LLMInterface.sendMessage(provider, {
-        ...llmRequest,
-        stream: true
-      });
-      
-      // Handle streaming response
-      for await (const chunk of stream) {
-        const claudeChunk = this.claudeCompat.convertStreamResponse(chunk, provider);
-        res.write(claudeChunk);
+
+      if (!this.openRouterClient.isConfigured()) {
+        throw new Error('OPENROUTER_API_KEY not configured');
+      }
+      const exposeReasoning = process.env.EXPOSE_REASONING === 'true';
+      // Stream deltas from OpenRouter and re-emit as Claude deltas. When
+      // EXPOSE_REASONING is on, reasoning tokens are emitted as thinking deltas.
+      for await (const part of this.openRouterClient.streamCompletion({
+        model: llmRequest.model,
+        messages: llmRequest.messages,
+        max_tokens: llmRequest.max_tokens,
+        temperature: llmRequest.temperature,
+        top_p: llmRequest.top_p,
+        stop: llmRequest.stop
+      }, { detailed: exposeReasoning })) {
+        // In detailed mode parts are { content, reasoning }; otherwise a string.
+        if (typeof part === 'string') {
+          res.write(`data: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: part } })}\n\n`);
+          continue;
+        }
+        if (part.reasoning) {
+          res.write(`data: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', text: part.reasoning } })}\n\n`);
+        }
+        if (part.content) {
+          res.write(`data: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: part.content } })}\n\n`);
+        }
       }
       
       // Send end event
@@ -456,7 +522,10 @@ class ClaudeLLMGateway {
         success: true,
         message: 'Provider configuration refreshed',
         timestamp: new Date().toISOString(),
-        total_providers: this.providers.size
+        total_providers: this.providers.size,
+        model_sync: typeof this.configManager.getLastSyncInfo === 'function'
+          ? this.configManager.getLastSyncInfo()
+          : null
       });
     } catch (error) {
       res.status(500).json({
@@ -494,6 +563,75 @@ class ClaudeLLMGateway {
   }
 
   /**
+   * Handle live model catalog requests. Returns the automatically synced model
+   * information (from OpenRouter) grouped by provider, plus a flat model list.
+   * Optional query: ?provider=openai to filter, ?flat=true to only return models.
+   */
+  async handleModelCatalog(req, res) {
+    try {
+      const config = await this.configManager.loadConfig();
+      const providersOut = {};
+      const flatModels = [];
+      const filter = req.query.provider;
+
+      if (config && config.providers) {
+        for (const [name, entry] of Object.entries(config.providers)) {
+          if (filter && name !== filter) {
+            continue;
+          }
+          const details = Array.isArray(entry.model_details) ? entry.model_details : [];
+          providersOut[name] = {
+            model_source: entry.model_source || 'static',
+            model_count: (entry.models || []).length,
+            cost_per_1k_tokens: entry.cost_per_1k_tokens,
+            capabilities: entry.capabilities || {},
+            models: entry.models || [],
+            model_details: details
+          };
+          flatModels.push(...details);
+        }
+      }
+
+      res.json({
+        source: config ? (config.model_source || 'static') : 'static',
+        synced_at: config ? (config.openrouter_synced_at || null) : null,
+        total_models: flatModels.length,
+        providers: req.query.flat === 'true' ? undefined : providersOut,
+        models: flatModels
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Handle model sync status requests. Reports where model information came from
+   * (OpenRouter vs static), when it was last synced, and how many models exist.
+   */
+  async handleModelSyncStatus(req, res) {
+    try {
+      const config = await this.configManager.loadConfig();
+      const lastSync = typeof this.configManager.getLastSyncInfo === 'function'
+        ? this.configManager.getLastSyncInfo()
+        : null;
+      res.json({
+        openrouter_sync_enabled: this.configManager.openRouterSyncEnabled !== false,
+        last_sync: lastSync,
+        config: config ? {
+          model_source: config.model_source || 'static',
+          openrouter_synced_at: config.openrouter_synced_at || null,
+          openrouter_total_models: config.openrouter_total_models || 0,
+          generated_at: config.generated_at || null,
+          total_providers: config.total_providers || 0
+        } : null,
+        ttl_hours: this.configManager.configTtlHours
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
    * Handle configuration requests
    */
   async handleConfig(req, res) {
@@ -521,31 +659,31 @@ class ClaudeLLMGateway {
    * Handle root path requests
    */
   handleRoot(req, res) {
-    // Check Accept header to determine response type
+    // Serve the HTML dashboard only to browsers (which send Accept: text/html).
+    // API clients and tests (no explicit html preference) get JSON gateway info.
     const acceptHeader = req.get('Accept') || '';
-    
-    // If client explicitly requests JSON or is an API client
-    if (acceptHeader.includes('application/json') && !acceptHeader.includes('text/html')) {
-      return res.json({
-        name: 'Claude LLM Gateway',
-        version: require('../package.json').version,
-        description: 'Multi-LLM API Gateway for Claude Code using llm-interface',
-        endpoints: {
-          messages: '/v1/messages',
-          chat: '/v1/chat/completions',
-          health: '/health',
-          providers: '/providers',
-          models: '/models',
-          stats: '/stats'
-        },
-        providers: Array.from(this.providers.keys()),
-        documentation: 'https://github.com/claude-llm-gateway'
-      });
+    if (acceptHeader.includes('text/html')) {
+      const indexPath = path.join(__dirname, '..', 'public', 'index.html');
+      return res.sendFile(indexPath);
     }
-    
-    // For browser requests, serve the HTML dashboard
-    const indexPath = path.join(__dirname, '..', 'public', 'index.html');
-    res.sendFile(indexPath);
+
+    return res.json({
+      name: 'Claude LLM Gateway',
+      version: require('../package.json').version,
+      description: 'Multi-LLM API Gateway for Claude Code (dynamic OpenRouter backend)',
+      endpoints: {
+        messages: '/v1/messages',
+        chat: '/v1/chat/completions',
+        health: '/health',
+        providers: '/providers',
+        models: '/models',
+        models_catalog: '/models/catalog',
+        models_sync_status: '/models/sync-status',
+        stats: '/stats'
+      },
+      providers: Array.from(this.providers.keys()),
+      documentation: 'https://github.com/claude-llm-gateway'
+    });
   }
 
   /**
@@ -631,6 +769,9 @@ class ClaudeLLMGateway {
    */
   async start(port = null) {
     await this.initialize();
+
+    // Keep model information fresh automatically in the background.
+    this.startModelSyncScheduler();
     
     const serverPort = port || process.env.GATEWAY_PORT || 8765;
     const serverHost = process.env.GATEWAY_HOST || 'localhost';

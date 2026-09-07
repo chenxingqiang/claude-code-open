@@ -229,6 +229,86 @@ async function startDaemonProcess(options) {
   }
 }
 
+// Query a running gateway's model endpoints over HTTP (used by `models --url`).
+async function runModelsRemote(act, options) {
+  const fetch = require('node-fetch');
+  const base = options.url.replace(/\/$/, '');
+  // Ask the server to close the socket so node-fetch's agent does not keep the
+  // CLI process alive with a pooled keep-alive connection.
+  const fetchOpts = { headers: { Connection: 'close' } };
+
+  if (act === 'sync') {
+    console.log(chalk.blue(`🌐 Requesting model refresh from ${base} ...`));
+    const res = await fetch(`${base}/providers/refresh`, fetchOpts);
+    if (!res.ok) {
+      throw new Error(`Gateway responded ${res.status} ${res.statusText}`);
+    }
+    const data = await res.json();
+    const info = data.model_sync;
+    if (info && info.ok) {
+      console.log(chalk.green(`✅ Gateway synced ${info.total_models} models from OpenRouter`));
+      console.log(chalk.gray(`   Synced at: ${info.synced_at}`));
+    } else {
+      console.log(chalk.yellow('⚠️ Gateway used static fallback (OpenRouter unavailable)'));
+      if (info && info.error) {
+        console.log(chalk.gray(`   Reason: ${info.error}`));
+      }
+    }
+    return;
+  }
+
+  if (act === 'status') {
+    const res = await fetch(`${base}/models/sync-status`, fetchOpts);
+    if (!res.ok) {
+      throw new Error(`Gateway responded ${res.status} ${res.statusText}`);
+    }
+    const data = await res.json();
+    const cfg = data.config || {};
+    console.log(chalk.blue('\n📊 === Model Catalog Status (remote) ==='));
+    console.log(`  Gateway:           ${base}`);
+    console.log(`  Sync enabled:      ${data.openrouter_sync_enabled}`);
+    console.log(`  Source:            ${chalk.cyan(cfg.model_source || 'static')}`);
+    console.log(`  OpenRouter synced: ${cfg.openrouter_synced_at || 'never'}`);
+    console.log(`  OpenRouter models: ${cfg.openrouter_total_models || 0}`);
+    console.log(`  Providers:         ${cfg.total_providers || 0}`);
+    console.log(`  TTL (hours):       ${data.ttl_hours}`);
+    console.log('');
+    return;
+  }
+
+  if (act === 'list') {
+    const q = options.provider ? `?provider=${encodeURIComponent(options.provider)}` : '';
+    const res = await fetch(`${base}/models/catalog${q}`, fetchOpts);
+    if (!res.ok) {
+      throw new Error(`Gateway responded ${res.status} ${res.statusText}`);
+    }
+    const data = await res.json();
+    const providers = data.providers || {};
+    const names = Object.keys(providers);
+    if (names.length === 0) {
+      console.log(chalk.yellow(`⚠️ No provider matched "${options.provider || ''}"`));
+      return;
+    }
+    const limit = parseInt(options.limit, 10) || 10;
+    console.log(chalk.blue('\n📚 === Model Catalog (remote) ==='));
+    for (const name of names) {
+      const entry = providers[name];
+      const models = entry.models || [];
+      const tag = entry.model_source === 'openrouter' ? chalk.green('[openrouter]') : chalk.gray('[static]');
+      console.log(`\n${chalk.bold(name)} ${tag} — ${models.length} models`);
+      models.slice(0, limit).forEach(m => console.log(`  ${chalk.cyan('•')} ${m}`));
+      if (models.length > limit) {
+        console.log(chalk.gray(`  ... and ${models.length - limit} more`));
+      }
+    }
+    console.log('');
+    return;
+  }
+
+  console.log(chalk.red(`❌ Unknown action "${act}". Use: status | sync | list`));
+  process.exit(1);
+}
+
 const program = new Command();
 
 program
@@ -240,7 +320,7 @@ program
 program
   .command('start')
   .description('Start the Claude LLM Gateway')
-  .option('-p, --port <port>', 'Port number to run the gateway on', '3000')
+  .option('-p, --port <port>', 'Port number to run the gateway on', '8765')
   .option('-h, --host <host>', 'Host to bind the gateway to', 'localhost')
   .option('-c, --config <path>', 'Path to configuration file')
   .option('-d, --daemon', 'Run as daemon process')
@@ -353,7 +433,15 @@ program
       if (options.update) {
         console.log(chalk.blue('🔄 Updating provider configuration...'));
         await configManager.discoverProviders();
-        console.log(chalk.green('✅ Configuration updated successfully'));
+        const info = configManager.getLastSyncInfo();
+        if (info && info.ok) {
+          console.log(chalk.green(`✅ Configuration updated from OpenRouter (${info.total_models} models)`));
+        } else {
+          console.log(chalk.green('✅ Configuration updated (static fallback)'));
+          if (info && info.error) {
+            console.log(chalk.gray(`   OpenRouter sync skipped/failed: ${info.error}`));
+          }
+        }
       }
 
       if (options.show) {
@@ -368,12 +456,111 @@ program
 
       if (options.reset) {
         console.log(chalk.yellow('🔄 Resetting configuration...'));
-        // Implementation would remove config file and regenerate
-        console.log(chalk.green('✅ Configuration reset'));
+        // The catalog is an auto-generated cache; removing it forces a fresh
+        // discovery (OpenRouter sync or static fallback) on the next run.
+        if (fs.existsSync(configManager.configPath)) {
+          fs.unlinkSync(configManager.configPath);
+          console.log(chalk.gray(`   Removed ${configManager.configPath}`));
+        }
+        await configManager.discoverProviders();
+        console.log(chalk.green('✅ Configuration reset and regenerated'));
       }
 
     } catch (error) {
       console.error(chalk.red('❌ Configuration operation failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Models command — inspect and refresh the auto-synced model catalog
+program
+  .command('models [action]')
+  .description('Manage the auto-synced model catalog: status | sync | list')
+  .option('-p, --provider <provider>', 'Filter to a single provider (for list)')
+  .option('-l, --limit <n>', 'Max models to show per provider (for list)', '10')
+  .option('-u, --url <url>', 'Query a running gateway over HTTP instead of the local catalog')
+  .action(async (action, options) => {
+    const act = (action || 'status').toLowerCase();
+    try {
+      // Remote mode: talk to a running gateway's HTTP endpoints.
+      if (options.url) {
+        return await runModelsRemote(act, options);
+      }
+
+      const configManager = new DynamicConfigManager();
+
+      if (act === 'sync') {
+        console.log(chalk.blue('🌐 Syncing model information...'));
+        await configManager.discoverProviders();
+        const info = configManager.getLastSyncInfo();
+        if (info && info.ok) {
+          console.log(chalk.green(`✅ Synced ${info.total_models} models from OpenRouter`));
+          console.log(chalk.gray(`   Synced at: ${info.synced_at}`));
+        } else {
+          console.log(chalk.yellow('⚠️ OpenRouter sync unavailable, used static fallback'));
+          if (info && info.error) {
+            console.log(chalk.gray(`   Reason: ${info.error}`));
+          }
+        }
+        return;
+      }
+
+      if (act === 'status') {
+        const config = await configManager.loadConfig();
+        if (!config) {
+          console.log(chalk.yellow('⚠️ No catalog yet. Run "claude-llm-gateway models sync".'));
+          return;
+        }
+        const providers = config.providers || {};
+        const bySource = { openrouter: 0, static: 0 };
+        let totalModels = 0;
+        for (const p of Object.values(providers)) {
+          const src = p.model_source === 'openrouter' ? 'openrouter' : 'static';
+          bySource[src] += 1;
+          totalModels += (p.models || []).length;
+        }
+        console.log(chalk.blue('\n📊 === Model Catalog Status ==='));
+        console.log(`  Source:            ${chalk.cyan(config.model_source || 'static')}`);
+        console.log(`  OpenRouter synced: ${config.openrouter_synced_at || 'never'}`);
+        console.log(`  OpenRouter models: ${config.openrouter_total_models || 0}`);
+        console.log(`  Providers:         ${Object.keys(providers).length} (openrouter=${bySource.openrouter}, static=${bySource.static})`);
+        console.log(`  Total models:      ${totalModels}`);
+        console.log(`  Generated at:      ${config.generated_at || 'unknown'}`);
+        console.log('');
+        return;
+      }
+
+      if (act === 'list') {
+        const config = await configManager.loadConfig();
+        if (!config || !config.providers) {
+          console.log(chalk.yellow('⚠️ No catalog yet. Run "claude-llm-gateway models sync".'));
+          return;
+        }
+        const limit = parseInt(options.limit, 10) || 10;
+        const entries = Object.entries(config.providers)
+          .filter(([name]) => !options.provider || name === options.provider);
+        if (entries.length === 0) {
+          console.log(chalk.yellow(`⚠️ No provider matched "${options.provider}"`));
+          return;
+        }
+        console.log(chalk.blue('\n📚 === Model Catalog ==='));
+        for (const [name, entry] of entries) {
+          const models = entry.models || [];
+          const tag = entry.model_source === 'openrouter' ? chalk.green('[openrouter]') : chalk.gray('[static]');
+          console.log(`\n${chalk.bold(name)} ${tag} — ${models.length} models`);
+          models.slice(0, limit).forEach(m => console.log(`  ${chalk.cyan('•')} ${m}`));
+          if (models.length > limit) {
+            console.log(chalk.gray(`  ... and ${models.length - limit} more`));
+          }
+        }
+        console.log('');
+        return;
+      }
+
+      console.log(chalk.red(`❌ Unknown action "${act}". Use: status | sync | list`));
+      process.exit(1);
+    } catch (error) {
+      console.error(chalk.red('❌ Models operation failed:'), error.message);
       process.exit(1);
     }
   });
@@ -384,7 +571,7 @@ program
   .description('Test gateway functionality')
   .option('-p, --provider <provider>', 'Test specific provider')
   .option('-m, --model <model>', 'Test specific model')
-  .option('-u, --url <url>', 'Gateway URL to test', 'http://localhost:3000')
+  .option('-u, --url <url>', 'Gateway URL to test', 'http://localhost:8765')
   .action(async (options) => {
     try {
       console.log(chalk.blue('🧪 Testing gateway functionality...'));
